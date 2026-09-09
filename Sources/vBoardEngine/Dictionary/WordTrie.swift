@@ -116,15 +116,16 @@ public final class WordTrie: @unchecked Sendable {
 
         // Nếu tiền tố chính nó là một từ hợp lệ
         if let exact = current.word {
-            finalWords.append(matchCase(of: exact, pattern: prefix))
-            seen.insert(exact.lowercased())
+            let lowExact = exact.lowercased()
+            finalWords.append(lowExact)
+            seen.insert(lowExact)
         }
 
         for item in results {
             let low = item.word.lowercased()
             if !seen.contains(low) {
                 seen.insert(low)
-                finalWords.append(matchCase(of: item.word, pattern: prefix))
+                finalWords.append(low)
                 if finalWords.count >= limit {
                     break
                 }
@@ -215,13 +216,6 @@ public final class WordTrie: @unchecked Sendable {
         for (_, child) in node.children {
             collectWords(from: child, results: &results, maxCount: maxCount)
         }
-    }
-
-    private func matchCase(of word: String, pattern: String) -> String {
-        guard let firstPattern = pattern.first, firstPattern.isUppercase else {
-            return word
-        }
-        return word.prefix(1).uppercased() + word.dropFirst()
     }
 
     // MARK: - Bộ từ vựng tiếng Việt tần suất cao
@@ -327,18 +321,36 @@ public final class WordTrie: @unchecked Sendable {
         if let resourceURL = Bundle.module.url(forResource: "vietnamese_words", withExtension: "txt"),
            let content = try? String(contentsOf: resourceURL, encoding: .utf8) {
             parseAndInsertLines(content)
+            saveToAppGroupIfNeeded(content: content)
             return true
         }
         #endif
 
-        // 4. Thử đọc từ Main Bundle hoặc Extension Bundle
-        if let mainPath = Bundle.main.path(forResource: "vietnamese_words", ofType: "txt"),
-           let content = try? String(contentsOfFile: mainPath, encoding: .utf8) {
-            parseAndInsertLines(content)
-            return true
+        // 4. Thử đọc từ tất cả các bundle (Main Bundle, Extension Bundle, Frameworks)
+        var bundlesToCheck: [Bundle] = [Bundle.main]
+        bundlesToCheck.append(contentsOf: Bundle.allBundles)
+        bundlesToCheck.append(contentsOf: Bundle.allFrameworks)
+
+        for bundle in bundlesToCheck {
+            if let path = bundle.path(forResource: "vietnamese_words", ofType: "txt"),
+               let content = try? String(contentsOfFile: path, encoding: .utf8) {
+                parseAndInsertLines(content)
+                saveToAppGroupIfNeeded(content: content)
+                return true
+            }
         }
 
         return false
+    }
+
+    private func saveToAppGroupIfNeeded(content: String) {
+        let fileManager = FileManager.default
+        if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.com.nguyenphuong.vBoard") {
+            let targetURL = groupURL.appendingPathComponent("vietnamese_words.txt")
+            if !fileManager.fileExists(atPath: targetURL.path) {
+                try? content.write(to: targetURL, atomically: true, encoding: .utf8)
+            }
+        }
     }
 
     private func parseAndInsertLines(_ content: String) {

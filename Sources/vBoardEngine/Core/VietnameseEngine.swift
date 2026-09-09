@@ -463,4 +463,10 @@ public final class VietnameseEngine: @unchecked Sendable {
 
         return syllable
     }
+
+    /// Đặt lại trạng thái bộ gõ về ban đầu
+    public func reset() {
+        // VietnameseEngine hiện tại là stateless context-based,
+        // nhưng hàm này đóng vai trò giao diện chuẩn để xóa sạch bộ đệm ngữ âm
+    }
 }

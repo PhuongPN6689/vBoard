@@ -106,6 +106,82 @@ public enum ThemeMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+
+/// Chế độ gõ một tay (One-Handed Mode)
+public enum OneHandedMode: String, CaseIterable, Identifiable, Sendable {
+    case off = "off"
+    case left = "left"
+    case right = "right"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .off: return "Tắt (Toàn màn hình)"
+        case .left: return "Bàn tay trái"
+        case .right: return "Bàn tay phải"
+        }
+    }
+}
+
+/// Lựa chọn phông chữ cho bàn phím
+public enum KeyboardFontFamily: String, CaseIterable, Identifiable, Sendable {
+    case system = "system"
+    case rounded = "rounded"
+    case mono = "mono"
+    case serif = "serif"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .system: return "San Francisco (Mặc định)"
+        case .rounded: return "SF Pro Rounded (Bo tròn)"
+        case .mono: return "SF Mono (Lập trình)"
+        case .serif: return "New York (Serif Cổ điển)"
+        }
+    }
+}
+
+/// Danh mục Theme màu sắc & Gradient
+public enum KeyboardColorTheme: String, CaseIterable, Identifiable, Sendable {
+    case standard = "standard"
+    case gboardSlate = "gboardSlate"
+    case pitchBlack = "pitchBlack"
+    case paperWhite = "paperWhite"
+    case midnightNavy = "midnightNavy"
+    case cyberpunk = "cyberpunk"
+    case gradientPastelRose = "gradientPastelRose"
+    case gradientSkyBreeze = "gradientSkyBreeze"
+    case gradientMintWhisper = "gradientMintWhisper"
+    case gradientTwilightPurple = "gradientTwilightPurple"
+    case gradientDeepOcean = "gradientDeepOcean"
+    case gradientSunsetGlow = "gradientSunsetGlow"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .standard: return "Chuẩn hệ thống Material You"
+        case .gboardSlate: return "Gboard Dark Slate"
+        case .pitchBlack: return "OLED Pitch Black"
+        case .paperWhite: return "Clean Paper White"
+        case .midnightNavy: return "Deep Midnight Navy"
+        case .cyberpunk: return "Cyberpunk Neon"
+        case .gradientPastelRose: return "Pastel Rose (Dốc nhẹ)"
+        case .gradientSkyBreeze: return "Sky Breeze (Dốc nhẹ)"
+        case .gradientMintWhisper: return "Mint Whisper (Dốc nhẹ)"
+        case .gradientTwilightPurple: return "Twilight Purple (Dốc đứng)"
+        case .gradientDeepOcean: return "Deep Ocean (Dốc đứng)"
+        case .gradientSunsetGlow: return "Sunset Glow (Dốc đứng)"
+        }
+    }
+
+    public var isGradient: Bool {
+        return rawValue.starts(with: "gradient")
+    }
+}
+
 /// Quản lý cấu hình toàn cục cho bàn phím vBoard (dùng chung cho Host App và Keyboard Extension)
 public final class vBoardSettings: @unchecked Sendable {
     public static let shared = vBoardSettings()
@@ -169,6 +245,27 @@ public final class vBoardSettings: @unchecked Sendable {
         static let isSuggestionBarEnabled = "vboard_suggestion_bar"
         static let isClipboardEnabled = "vboard_clipboard_enabled"
         static let isGlideTypingEnabled = "vboard_glide_typing"
+                static let isShortcutExpansionEnabled = "vboard_shortcut_expansion"
+
+        static let oneHandedMode = "vboard_one_handed_mode"
+        static let toolbarItemsOrder = "vboard_toolbar_items_order"
+        static let isNumberRowForPasswordEnabled = "vboard_number_row_password"
+        static let isCommaKeyEnabled = "vboard_comma_key_enabled"
+        static let isPeriodKeyEnabled = "vboard_period_key_enabled"
+        static let fontFamily = "vboard_font_family"
+        static let fontSizeScale = "vboard_font_size_scale"
+        static let isAutoCapitalizationEnabled = "vboard_auto_capitalization"
+        static let isAutoSpaceAfterPunctuationEnabled = "vboard_auto_space_punctuation"
+        static let isAutoSwitchToABCAfterApostropheEnabled = "vboard_auto_abc_apostrophe"
+        static let isKeySoundEnabled = "vboard_key_sound_enabled"
+        static let soundVolume = "vboard_sound_volume"
+        static let isFlickDownEnabled = "vboard_flick_down_enabled"
+        static let isNextWordPredictionEnabled = "vboard_next_word_prediction"
+        static let isTextToEmojiEnabled = "vboard_text_to_emoji"
+        static let colorTheme = "vboard_color_theme"
+        static let isKeyBorderEnabled = "vboard_key_border_enabled"
+        static let isGlideTrailEnabled = "vboard_glide_trail_enabled"
+
     }
 
     // MARK: - Properties: OpenKey Core Settings
@@ -472,11 +569,204 @@ public final class vBoardSettings: @unchecked Sendable {
 
     public var isGlideTypingEnabled: Bool {
         get {
-            if defaults.object(forKey: Keys.isGlideTypingEnabled) == nil { return true }
+            if defaults.object(forKey: Keys.isGlideTypingEnabled) == nil { return false }
             return defaults.bool(forKey: Keys.isGlideTypingEnabled)
         }
         set {
             defaults.set(newValue, forKey: Keys.isGlideTypingEnabled)
+        }
+    }
+
+    /// Bật/Tắt tính năng tự động thay thế gõ tắt (Macro) khi gõ phím Space
+    public var isShortcutExpansionEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isShortcutExpansionEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isShortcutExpansionEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isShortcutExpansionEnabled)
+        }
+    }
+
+    // MARK: - Properties: Tính năng mở rộng v1.2.0 & v2.0
+
+    public var oneHandedMode: OneHandedMode {
+        get {
+            let raw = defaults.string(forKey: Keys.oneHandedMode) ?? "off"
+            return OneHandedMode(rawValue: raw) ?? .off
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.oneHandedMode)
+        }
+    }
+
+    public var toolbarItemsOrder: [String] {
+        get {
+            return defaults.stringArray(forKey: Keys.toolbarItemsOrder) ?? [
+                "clipboard", "dev", "undoRedo", "quickSettings", "oneHanded"
+            ]
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.toolbarItemsOrder)
+        }
+    }
+
+    public var isNumberRowForPasswordEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isNumberRowForPasswordEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isNumberRowForPasswordEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isNumberRowForPasswordEnabled)
+        }
+    }
+
+    public var isCommaKeyEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isCommaKeyEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isCommaKeyEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isCommaKeyEnabled)
+        }
+    }
+
+    public var isPeriodKeyEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isPeriodKeyEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isPeriodKeyEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isPeriodKeyEnabled)
+        }
+    }
+
+    public var fontFamily: KeyboardFontFamily {
+        get {
+            let raw = defaults.string(forKey: Keys.fontFamily) ?? "system"
+            return KeyboardFontFamily(rawValue: raw) ?? .system
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.fontFamily)
+        }
+    }
+
+    public var fontSizeScale: Double {
+        get {
+            let val = defaults.double(forKey: Keys.fontSizeScale)
+            return val == 0 ? 1.0 : val
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.fontSizeScale)
+        }
+    }
+
+    public var isAutoCapitalizationEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isAutoCapitalizationEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isAutoCapitalizationEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isAutoCapitalizationEnabled)
+        }
+    }
+
+    public var isAutoSpaceAfterPunctuationEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isAutoSpaceAfterPunctuationEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isAutoSpaceAfterPunctuationEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isAutoSpaceAfterPunctuationEnabled)
+        }
+    }
+
+    public var isAutoSwitchToABCAfterApostropheEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isAutoSwitchToABCAfterApostropheEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isAutoSwitchToABCAfterApostropheEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isAutoSwitchToABCAfterApostropheEnabled)
+        }
+    }
+
+    public var isKeySoundEnabled: Bool {
+        get {
+            return defaults.bool(forKey: Keys.isKeySoundEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isKeySoundEnabled)
+        }
+    }
+
+    public var soundVolume: Float {
+        get {
+            let val = defaults.float(forKey: Keys.soundVolume)
+            return val == 0 ? 0.5 : val
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.soundVolume)
+        }
+    }
+
+    public var isFlickDownEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isFlickDownEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isFlickDownEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isFlickDownEnabled)
+        }
+    }
+
+    public var isNextWordPredictionEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isNextWordPredictionEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isNextWordPredictionEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isNextWordPredictionEnabled)
+        }
+    }
+
+    public var isTextToEmojiEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isTextToEmojiEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isTextToEmojiEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isTextToEmojiEnabled)
+        }
+    }
+
+    public var colorTheme: KeyboardColorTheme {
+        get {
+            let raw = defaults.string(forKey: Keys.colorTheme) ?? "standard"
+            return KeyboardColorTheme(rawValue: raw) ?? .standard
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.colorTheme)
+        }
+    }
+
+    public var isKeyBorderEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isKeyBorderEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isKeyBorderEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isKeyBorderEnabled)
+        }
+    }
+
+    public var isGlideTrailEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isGlideTrailEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isGlideTrailEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isGlideTrailEnabled)
         }
     }
 }

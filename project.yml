@@ -38,6 +38,8 @@ targets:
     platform: iOS
     sources:
       - path: HostApp
+      - path: Sources/vBoardEngine/Resources
+        buildPhase: resources
     dependencies:
       - target: vBoardKeyboardExtension
       - target: vBoardKeyboard
@@ -58,6 +60,8 @@ targets:
     platform: iOS
     sources:
       - path: KeyboardExtension
+      - path: Sources/vBoardEngine/Resources
+        buildPhase: resources
     dependencies:
       - target: vBoardKeyboard
       - target: vBoardEngine

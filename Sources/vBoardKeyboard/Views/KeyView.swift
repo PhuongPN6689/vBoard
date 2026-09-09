@@ -25,6 +25,7 @@ public final class KeyView: UIControl {
     private var isCalloutActive = false
     private var initialTouchPoint: CGPoint = .zero
     private var hasMovedBeyondTapThreshold = false
+    private var didFlickDown = false
 
     public init(key: KeyboardKey) {
         self.key = key
@@ -60,7 +61,7 @@ public final class KeyView: UIControl {
         addSubview(iconImageView)
 
         // Nhãn phụ (góc trên phải - ví dụ số 1..0 hoặc ký tự đặc biệt)
-        if let secondary = key.secondaryLabel, vBoardSettings.shared.isHintSymbolsEnabled {
+        if let secondary = key.secondaryLabel {
             secondaryLabel.text = secondary
             secondaryLabel.textAlignment = .center
             secondaryLabel.font = UIFont.systemFont(ofSize: 9.5, weight: .medium)
@@ -72,17 +73,44 @@ public final class KeyView: UIControl {
     }
 
     private func fontForKey(_ key: KeyboardKey) -> UIFont {
+        let settings = vBoardSettings.shared
+        let scale = CGFloat(settings.fontSizeScale)
+        let baseSize: CGFloat
+        let weight: UIFont.Weight
+
         switch key.type {
         case .character:
-            return UIFont.systemFont(ofSize: 21.0, weight: .regular)
+            baseSize = 21.0 * scale
+            weight = .regular
         case .space:
-            return UIFont.systemFont(ofSize: 13.0, weight: .regular)
+            baseSize = 13.0 * scale
+            weight = .regular
         case .shift, .delete:
-            return UIFont.systemFont(ofSize: 17.0, weight: .medium)
+            baseSize = 17.0 * scale
+            weight = .medium
         case .modeSwitch:
-            return UIFont.systemFont(ofSize: 15.0, weight: .regular)
+            baseSize = 15.0 * scale
+            weight = .regular
         case .returnKey, .globe, .emoji, .dismiss:
-            return UIFont.systemFont(ofSize: 15.0, weight: .regular)
+            baseSize = 15.0 * scale
+            weight = .regular
+        }
+
+        switch settings.fontFamily {
+        case .system:
+            return UIFont.systemFont(ofSize: baseSize, weight: weight)
+        case .rounded:
+            if let desc = UIFont.systemFont(ofSize: baseSize, weight: weight).fontDescriptor.withDesign(.rounded) {
+                return UIFont(descriptor: desc, size: baseSize)
+            }
+            return UIFont.systemFont(ofSize: baseSize, weight: weight)
+        case .mono:
+            return UIFont.monospacedSystemFont(ofSize: baseSize, weight: weight)
+        case .serif:
+            if let desc = UIFont.systemFont(ofSize: baseSize, weight: weight).fontDescriptor.withDesign(.serif) {
+                return UIFont(descriptor: desc, size: baseSize)
+            }
+            return UIFont.systemFont(ofSize: baseSize, weight: weight)
         }
     }
 
@@ -130,6 +158,7 @@ public final class KeyView: UIControl {
 
     public func updateTheme() {
         let settings = vBoardSettings.shared
+        label.font = fontForKey(key)
         let isDark: Bool
         switch settings.themeMode {
         case .light: isDark = false
@@ -137,16 +166,44 @@ public final class KeyView: UIControl {
         case .system: isDark = (traitCollection.userInterfaceStyle == .dark)
         }
 
-        // Bảng màu chuẩn Gboard Material You
-        let darkCharBg = UIColor(red: 54/255, green: 56/255, blue: 61/255, alpha: 1.0) // #36383D
-        let darkSpecialBg = UIColor(red: 40/255, green: 41/255, blue: 45/255, alpha: 1.0) // #28292D
-        let darkText = UIColor.white
-        let darkSecondary = UIColor(red: 154/255, green: 160/255, blue: 166/255, alpha: 1.0) // #9AA0A6
+        // Viền phím (Key Border Toggle)
+        let hasBorder = settings.isKeyBorderEnabled
+        layer.shadowOpacity = hasBorder ? 0.15 : 0.0
+        layer.borderWidth = hasBorder ? 0.5 : 0.0
+        layer.borderColor = (isDark ? UIColor.white.withAlphaComponent(0.08) : UIColor.black.withAlphaComponent(0.08)).cgColor
 
-        let lightCharBg = UIColor.white // #FFFFFF
-        let lightSpecialBg = UIColor(red: 211/255, green: 227/255, blue: 253/255, alpha: 1.0) // #D3E3FD (Material You Soft Pastel Blue)
-        let lightText = UIColor(red: 31/255, green: 31/255, blue: 31/255, alpha: 1.0) // #1F1F1F
-        let lightSecondary = UIColor(red: 95/255, green: 99/255, blue: 104/255, alpha: 1.0) // #5F6368
+        // Bảng màu theo Theme đã chọn
+        var darkCharBg = UIColor(red: 54/255, green: 56/255, blue: 61/255, alpha: 1.0)
+        var darkSpecialBg = UIColor(red: 40/255, green: 41/255, blue: 45/255, alpha: 1.0)
+        var darkText = UIColor.white
+        var darkSecondary = UIColor(red: 154/255, green: 160/255, blue: 166/255, alpha: 1.0)
+
+        var lightCharBg = UIColor.white
+        var lightSpecialBg = UIColor(red: 211/255, green: 227/255, blue: 253/255, alpha: 1.0)
+        var lightText = UIColor(red: 31/255, green: 31/255, blue: 31/255, alpha: 1.0)
+        var lightSecondary = UIColor(red: 95/255, green: 99/255, blue: 104/255, alpha: 1.0)
+
+        switch settings.colorTheme {
+        case .pitchBlack:
+            darkCharBg = UIColor(red: 20/255, green: 20/255, blue: 20/255, alpha: 1.0)
+            darkSpecialBg = UIColor(red: 10/255, green: 10/255, blue: 10/255, alpha: 1.0)
+            layer.borderColor = UIColor.white.withAlphaComponent(0.12).cgColor
+        case .paperWhite:
+            lightCharBg = UIColor(red: 250/255, green: 250/255, blue: 250/255, alpha: 1.0)
+            lightSpecialBg = UIColor(red: 235/255, green: 238/255, blue: 242/255, alpha: 1.0)
+        case .midnightNavy:
+            darkCharBg = UIColor(red: 28/255, green: 37/255, blue: 65/255, alpha: 1.0)
+            darkSpecialBg = UIColor(red: 18/255, green: 25/255, blue: 45/255, alpha: 1.0)
+            darkSecondary = UIColor(red: 140/255, green: 160/255, blue: 190/255, alpha: 1.0)
+        case .cyberpunk:
+            darkCharBg = UIColor(red: 26/255, green: 20/255, blue: 45/255, alpha: 1.0)
+            darkSpecialBg = UIColor(red: 18/255, green: 14/255, blue: 36/255, alpha: 1.0)
+            darkText = UIColor(red: 0/255, green: 245/255, blue: 255/255, alpha: 1.0)
+            darkSecondary = UIColor(red: 255/255, green: 110/255, blue: 200/255, alpha: 1.0)
+            layer.borderColor = UIColor(red: 0/255, green: 245/255, blue: 255/255, alpha: 0.35).cgColor
+        default:
+            break
+        }
 
         secondaryLabel.textColor = isDark ? darkSecondary : lightSecondary
         secondaryLabel.isHidden = !settings.isHintSymbolsEnabled
@@ -330,6 +387,7 @@ public final class KeyView: UIControl {
                 }
                 self.didRepeatDelete = true
                 HapticManager.shared.playSpecialKey()
+                SoundManager.shared.playKeyClick()
                 self.delegate?.keyViewDidTap(self)
             }
         }
@@ -348,8 +406,10 @@ public final class KeyView: UIControl {
         isLongPressedTriggered = false
         isCalloutActive = false
         hasMovedBeyondTapThreshold = false
+        didFlickDown = false
         showPreviewPopup()
         HapticManager.shared.playKeyTap()
+        SoundManager.shared.playKeyClick()
 
         if case .delete = key.type {
             startRepeatDeleteTimer()
@@ -375,6 +435,7 @@ public final class KeyView: UIControl {
 
     /// Hủy bỏ nhấn giữ ngay lập tức (dùng khi vuốt Glide hoặc nhận diện cử chỉ khác)
     public func cancelLongPress() {
+        if isCalloutActive { return }
         longPressTimer?.invalidate()
         longPressTimer = nil
         isLongPressedTriggered = false
@@ -391,13 +452,23 @@ public final class KeyView: UIControl {
         let dist = hypot(currentPoint.x - initialTouchPoint.x, currentPoint.y - initialTouchPoint.y)
 
         if isCalloutActive {
-            if let container = superview {
-                let ptInContainer = touch.location(in: container)
-                delegate?.keyView(self, didUpdateCalloutTouch: ptInContainer)
-            }
+            let ptInSelf = touch.location(in: self)
+            let ptInTarget = convert(ptInSelf, to: delegate as? UIView ?? superview)
+            delegate?.keyView(self, didUpdateCalloutTouch: ptInTarget)
         } else {
-            // Khi ngón tay dịch chuyển quá 10pt (bắt đầu cử chỉ vuốt Glide / swipe typing):
-            // LẬP TỨC hủy timer nhấn giữ và đóng popup preview để không bao giờ bị nhầm thành long press hay tap!
+            // Nhận diện cử chỉ Flick Down vuốt phím xuống để nhập ký hiệu phụ ngay lập tức
+            let dy = currentPoint.y - initialTouchPoint.y
+            let dx = abs(currentPoint.x - initialTouchPoint.x)
+            if vBoardSettings.shared.isFlickDownEnabled, !didFlickDown, let sec = key.secondaryLabel, dy > 14.0, dy > 1.8 * dx {
+                didFlickDown = true
+                hasMovedBeyondTapThreshold = true
+                cancelLongPress()
+                HapticManager.shared.playSpecialKey()
+                let simulatedKey = KeyboardKey.char(sec)
+                delegate?.keyViewDidTap(KeyView(key: simulatedKey))
+                return
+            }
+
             if dist > 10.0 {
                 hasMovedBeyondTapThreshold = true
                 cancelLongPress()
@@ -411,6 +482,11 @@ public final class KeyView: UIControl {
         hidePreviewPopup()
         stopRepeatDeleteTimer()
         longPressTimer?.invalidate()
+
+        if didFlickDown {
+            didFlickDown = false
+            return
+        }
 
         if isCalloutActive {
             isCalloutActive = false
@@ -426,6 +502,7 @@ public final class KeyView: UIControl {
         }
         didRepeatDelete = false
         hasMovedBeyondTapThreshold = false
+        didFlickDown = false
     }
 
     public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -434,7 +511,13 @@ public final class KeyView: UIControl {
         hidePreviewPopup()
         stopRepeatDeleteTimer()
         longPressTimer?.invalidate()
+
+        if didFlickDown {
+            didFlickDown = false
+            return
+        }
         hasMovedBeyondTapThreshold = false
+        didFlickDown = false
 
         if isCalloutActive {
             isCalloutActive = false

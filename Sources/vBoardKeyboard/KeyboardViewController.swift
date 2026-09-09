@@ -1,6 +1,9 @@
 #if canImport(UIKit)
 import UIKit
 import vBoardEngine
+#if canImport(AudioToolbox)
+import AudioToolbox
+#endif
 
 /// Wrapper chuyển đổi UITextDocumentProxy của Apple sang TextDocumentProxyProtocol của vBoard
 @MainActor
@@ -34,11 +37,10 @@ final class NativeTextProxyWrapper: TextDocumentProxyProtocol {
 
 /// Controller chính của Bàn phím iOS vBoard (UIInputViewController)
 @MainActor
-open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, SuggestionBarViewDelegate, QuickSettingsViewDelegate {
+open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, SuggestionBarViewDelegate, QuickSettingsViewDelegate, ClipboardViewDelegate, EmojiPickerViewDelegate {
     public private(set) var keyboardView: KeyboardView!
     public private(set) var adapter: TextProxyAdapter!
     private var proxyWrapper: NativeTextProxyWrapper!
-    private var quickSettingsView: QuickSettingsView?
 
     private var heightConstraint: NSLayoutConstraint?
 
@@ -67,6 +69,9 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
 
         // Chuẩn bị Haptics
         HapticManager.shared.prepare()
+        ActionHistoryManager.shared.onHistoryStateChanged = { [weak self] in
+            self?.keyboardView.suggestionBar.updateHistoryButtons()
+        }
 
         // Lắng nghe tín hiệu Darwin IPC từ Host App Settings (< 0.1ms)
         setupDarwinNotificationListener()
@@ -114,14 +119,20 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         adapter.engine.isWAtWordBeginningEnabled = settings.isWAtWordBeginningEnabled
         adapter.engine.isModernToneBalancingEnabled = settings.isModernToneBalancingEnabled
 
+        let isSecure = textDocumentProxy.isSecureTextEntry ?? false
+        let isPassword = (textDocumentProxy.textContentType == .password || textDocumentProxy.textContentType == .newPassword)
+        let isNumberRowActive = settings.isNumberRowEnabled || (settings.isNumberRowForPasswordEnabled && (isSecure || isPassword))
+        keyboardView.isNumberRowActive = isNumberRowActive
+
         keyboardView.currentReturnKeyType = textDocumentProxy.returnKeyType ?? .default
         keyboardView.refreshLayout()
 
         let scale = settings.keyboardHeightScale
         let isPad = traitCollection.userInterfaceIdiom == .pad
         let baseHeight: CGFloat = isPad ? scale.padHeight : scale.phoneHeight
+
         var calculatedHeight: CGFloat = baseHeight
-        if settings.isNumberRowEnabled && !keyboardView.isNumberPadActive {
+        if isNumberRowActive && !keyboardView.isNumberPadActive {
             calculatedHeight += 28.0
         }
         if settings.isSuggestionBarEnabled && !keyboardView.isNumberPadActive {
@@ -156,9 +167,13 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             keyboardView.setNumbersMode()
         }
 
-        // Tự động lưu mẩu văn bản vừa copy vào Bảng tạm nếu được cấp quyền
+        // Tự động lưu mẩu văn bản vừa copy vào Bảng tạm và hiển thị Smart Quick Chip
         if settings.isClipboardEnabled, UIPasteboard.general.hasStrings, let text = UIPasteboard.general.string {
             ClipboardManager.shared.addClip(text)
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                keyboardView.suggestionBar.smartClipText = trimmed
+            }
         }
 
         updateWordSuggestions()
@@ -190,41 +205,100 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         guard vBoardSettings.shared.isSuggestionBarEnabled, !keyboardView.isNumberPadActive else { return }
         let currentWord = adapter.engine.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
         if currentWord.isEmpty {
-            keyboardView.suggestionBar.setSuggestions([])
+            var predictions: [String] = []
+            let trimmed = (proxyWrapper.documentContextBeforeInput ?? "").trimmingCharacters(in: .whitespaces)
+            let lastWord = adapter.engine.extractCurrentWord(from: trimmed)
+
+            if !lastWord.isEmpty {
+                if vBoardSettings.shared.isNextWordPredictionEnabled {
+                    predictions.append(contentsOf: NextWordPredictor.shared.predictNextWords(after: lastWord, limit: 3))
+                }
+                if vBoardSettings.shared.isTextToEmojiEnabled {
+                    predictions.append(contentsOf: TextToEmojiMapper.shared.emojis(for: lastWord))
+                }
+            }
+
+            if !predictions.isEmpty {
+                let formatted = predictions.map { keyboardView.formatSuggestionText($0) }
+                keyboardView.suggestionBar.setSuggestions(Array(formatted.prefix(3)))
+            } else {
+                keyboardView.suggestionBar.setSuggestions([])
+            }
         } else {
-            let suggestions = WordTrie.shared.suggest(prefix: currentWord, limit: 3)
-            keyboardView.suggestionBar.setSuggestions(suggestions)
+            var suggestions = WordTrie.shared.suggest(prefix: currentWord, limit: 3)
+            if vBoardSettings.shared.isTextToEmojiEnabled {
+                let emojis = TextToEmojiMapper.shared.emojis(for: currentWord)
+                if !emojis.isEmpty {
+                    // Nếu có emoji phù hợp với từ khóa đang gõ (ví dụ 'tim' -> ❤️), đưa emoji vào vị trí thứ 3 để chọn nhanh
+                    if suggestions.count >= 2 {
+                        suggestions = [suggestions[0], suggestions[1], emojis[0]]
+                    } else {
+                        suggestions.append(emojis[0])
+                    }
+                }
+            }
+            let formatted = suggestions.map { keyboardView.formatSuggestionText($0) }
+            keyboardView.suggestionBar.setSuggestions(formatted)
         }
     }
 
     // MARK: - KeyboardViewDelegate
 
     public func keyboardView(_ keyboardView: KeyboardView, didPressKey key: KeyboardKey) {
+        keyboardView.hideClipboardView()
+
         switch key.type {
         case .character(let charStr):
-            if keyboardView.isDeveloperModeActive {
-                // Ở chế độ Lập trình viên: bypass bộ gõ tiếng Việt, chèn trực tiếp các ký tự / phím điều hướng
+            SoundManager.shared.playKeyClick()
+
+            if charStr == "←" || (keyboardView.isSymbolsLayerActive && charStr == "<") {
+                proxyWrapper.adjustTextPosition(byCharacterOffset: -1)
+            } else if charStr == "→" || (keyboardView.isSymbolsLayerActive && charStr == ">") {
+                proxyWrapper.adjustTextPosition(byCharacterOffset: 1)
+            } else if charStr == "⇤" {
+                let before = proxyWrapper.documentContextBeforeInput ?? ""
+                if let lastNewline = before.lastIndex(of: "\n") {
+                    let offset = before.distance(from: before.index(after: lastNewline), to: before.endIndex)
+                    proxyWrapper.adjustTextPosition(byCharacterOffset: -offset)
+                } else {
+                    proxyWrapper.adjustTextPosition(byCharacterOffset: -before.count)
+                }
+            } else if charStr == "⇥" {
+                let after = proxyWrapper.documentContextAfterInput ?? ""
+                if let nextNewline = after.firstIndex(of: "\n") {
+                    let offset = after.distance(from: after.startIndex, to: nextNewline)
+                    proxyWrapper.adjustTextPosition(byCharacterOffset: offset)
+                } else {
+                    proxyWrapper.adjustTextPosition(byCharacterOffset: after.count)
+                }
+            } else if keyboardView.isDeveloperModeActive {
                 if charStr == "Tab" {
                     let tabStr = vBoardSettings.shared.developerTabBehavior.insertString
                     proxyWrapper.insertText(tabStr)
-                } else if charStr == "←" {
+                } else if vBoardSettings.shared.isPairAutoCompleteEnabled, let pair = pairForChar(charStr) {
+                    proxyWrapper.insertText(pair)
                     proxyWrapper.adjustTextPosition(byCharacterOffset: -1)
-                } else if charStr == "→" {
-                    proxyWrapper.adjustTextPosition(byCharacterOffset: 1)
                 } else {
                     proxyWrapper.insertText(charStr)
                 }
-            } else if keyboardView.isSymbolsLayerActive && (charStr == "<" || charStr == ">") {
-                // Phím điều hướng con trỏ trên Layer Ký hiệu cấp 2 chuẩn Gboard
-                let offset = (charStr == "<") ? -1 : 1
-                proxyWrapper.adjustTextPosition(byCharacterOffset: offset)
             } else {
+                // Tự động thêm dấu cách sau dấu câu nếu gõ chữ cái liền kề
+                if vBoardSettings.shared.isAutoSpaceAfterPunctuationEnabled {
+                    let before = proxyWrapper.documentContextBeforeInput ?? ""
+                    if let last = before.last, (last == "," || last == "." || last == "!" || last == "?" || last == ":" || last == ";") {
+                        if charStr.count == 1, let firstCh = charStr.first, firstCh.isLetter {
+                            proxyWrapper.insertText(" ")
+                        }
+                    }
+                }
+
                 if charStr.count == 1, let firstChar = charStr.first {
                     adapter.handleKeyInput(firstChar, proxy: proxyWrapper)
                 } else {
                     proxyWrapper.insertText(charStr)
                 }
             }
+            checkAutoCapitalization()
 
         case .space:
             let now = Date().timeIntervalSince1970
@@ -276,8 +350,23 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         for _ in 0..<currentWord.count {
             proxyWrapper.deleteBackward()
         }
-        proxyWrapper.insertText(word + " ")
+        let formattedWord = keyboardView.formatSuggestionText(word)
+        proxyWrapper.insertText(formattedWord + " ")
         updateWordSuggestions()
+        keyboardView.resetShiftIfNeeded()
+    }
+
+    private func pairForChar(_ s: String) -> String? {
+        switch s {
+        case "{": return "{}"
+        case "[": return "[]"
+        case "(": return "()"
+        case "<": return "<>"
+        case "\"": return "\"\""
+        case "'": return "''"
+        case "`": return "``"
+        default: return nil
+        }
     }
 
     // MARK: - SuggestionBarViewDelegate
@@ -287,26 +376,18 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         for _ in 0..<currentWord.count {
             proxyWrapper.deleteBackward()
         }
-        proxyWrapper.insertText(word + " ")
+        let formattedWord = keyboardView.formatSuggestionText(word)
+        proxyWrapper.insertText(formattedWord + " ")
         keyboardView.suggestionBar.setSuggestions([])
+        keyboardView.resetShiftIfNeeded()
     }
 
-    public func suggestionBar(_ bar: SuggestionBarView, didSelectClipboardText text: String) {
-        proxyWrapper.insertText(text)
-        updateWordSuggestions()
+    public func suggestionBarDidTapClipboard(_ bar: SuggestionBarView) {
+        keyboardView.showClipboardView(delegate: self)
     }
 
     public func suggestionBarDidTapSettings(_ bar: SuggestionBarView) {
-        if quickSettingsView == nil {
-            let qs = QuickSettingsView(frame: keyboardView.bounds)
-            qs.delegate = self
-            keyboardView.addSubview(qs)
-            quickSettingsView = qs
-        }
-        quickSettingsView?.frame = keyboardView.bounds
-        quickSettingsView?.updateUIState()
-        quickSettingsView?.isHidden = false
-        keyboardView.bringSubviewToFront(quickSettingsView!)
+        keyboardView.showQuickSettingsView(delegate: self)
     }
 
     public func suggestionBarDidTapTextEditing(_ bar: SuggestionBarView) {
@@ -317,19 +398,84 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         keyboardView.setDeveloperMode(!keyboardView.isDeveloperModeActive)
     }
 
+
+    // MARK: - Undo & Redo & One-Handed & SmartChip Delegate
+
+    public func suggestionBarDidTapUndo(_ bar: SuggestionBarView) {
+        adapter.handleUndo(proxy: proxyWrapper)
+        updateWordSuggestions()
+        checkAutoCapitalization()
+        bar.updateHistoryButtons()
+    }
+
+    public func suggestionBarDidTapRedo(_ bar: SuggestionBarView) {
+        adapter.handleRedo(proxy: proxyWrapper)
+        updateWordSuggestions()
+        checkAutoCapitalization()
+        bar.updateHistoryButtons()
+    }
+
+    public func suggestionBarDidTapSmartChip(_ bar: SuggestionBarView, clipText: String) {
+        proxyWrapper.insertText(clipText)
+        updateWordSuggestions()
+        checkAutoCapitalization()
+    }
+
+    public func suggestionBarDidTapOneHanded(_ bar: SuggestionBarView) {
+        let cur = vBoardSettings.shared.oneHandedMode
+        vBoardSettings.shared.oneHandedMode = (cur == .off) ? .right : .off
+        vBoardSettings.shared.notifySettingsChanged()
+        applyLatestSettings()
+    }
+
+    private func checkAutoCapitalization() {
+        guard vBoardSettings.shared.isAutoCapitalizationEnabled, !keyboardView.isDeveloperModeActive, !keyboardView.isNumberPadActive else { return }
+        let before = proxyWrapper.documentContextBeforeInput ?? ""
+        let shouldCap = before.isEmpty || before.hasSuffix(". ") || before.hasSuffix("! ") || before.hasSuffix("? ") || before.hasSuffix("\n")
+        keyboardView.setShiftState(shouldCap)
+    }
+
+    // MARK: - ClipboardViewDelegate
+
+    public func clipboardViewDidRequestClose(_ view: ClipboardView) {
+        keyboardView.hideClipboardView()
+    }
+
+    public func clipboardView(_ view: ClipboardView, didSelectClip text: String) {
+        proxyWrapper.insertText(text)
+        updateWordSuggestions()
+        keyboardView.hideClipboardView()
+    }
+
     // MARK: - QuickSettingsViewDelegate
 
     public func quickSettingsDidRequestClose(_ view: QuickSettingsView) {
-        view.isHidden = true
+        keyboardView.hideQuickSettingsView()
     }
 
     public func quickSettingsDidChangeConfiguration(_ view: QuickSettingsView) {
         applyLatestSettings()
+        keyboardView.quickSettingsView?.updateUIState()
+    }
 
-        if let qs = quickSettingsView, !qs.isHidden {
-            qs.frame = keyboardView.bounds
-            qs.setNeedsLayout()
-        }
+    // MARK: - KeyboardViewDelegate - Emoji
+    public func keyboardViewDidRequestEmojiPicker(_ keyboardView: KeyboardView) {
+        keyboardView.showEmojiPickerView(delegate: self)
+    }
+
+    // MARK: - EmojiPickerViewDelegate
+    public func emojiPickerView(_ view: EmojiPickerView, didSelectEmoji emoji: String) {
+        proxyWrapper.insertText(emoji)
+        updateWordSuggestions()
+    }
+
+    public func emojiPickerViewDidRequestBackspace(_ view: EmojiPickerView) {
+        proxyWrapper.deleteBackward()
+        updateWordSuggestions()
+    }
+
+    public func emojiPickerViewDidRequestSwitchToABC(_ view: EmojiPickerView) {
+        keyboardView.hideEmojiPickerView()
     }
 }
 #endif

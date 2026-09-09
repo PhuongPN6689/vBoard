@@ -46,6 +46,16 @@ public final class ClipboardManager: @unchecked Sendable {
         defaults.set(list, forKey: key)
     }
 
+    /// Xóa một mục khỏi lịch sử
+    public func deleteClip(_ text: String) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        var list = defaults.stringArray(forKey: key) ?? []
+        list.removeAll { $0 == text }
+        defaults.set(list, forKey: key)
+    }
+
     /// Xóa toàn bộ lịch sử bảng tạm
     public func clearHistory() {
         lock.lock()

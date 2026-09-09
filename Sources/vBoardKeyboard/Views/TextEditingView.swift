@@ -205,12 +205,24 @@ public final class TextEditingView: UIView {
 
     @objc private func moveToLineStart() {
         HapticManager.shared.playSpecialKey()
-        proxy?.adjustTextPosition(byCharacterOffset: -100)
+        guard let before = proxy?.documentContextBeforeInput, !before.isEmpty else { return }
+        if let lastNewlineIndex = before.lastIndex(of: "\n") {
+            let offset = before.distance(from: before.endIndex, to: before.index(after: lastNewlineIndex))
+            proxy?.adjustTextPosition(byCharacterOffset: offset)
+        } else {
+            proxy?.adjustTextPosition(byCharacterOffset: -before.count)
+        }
     }
 
     @objc private func moveToLineEnd() {
         HapticManager.shared.playSpecialKey()
-        proxy?.adjustTextPosition(byCharacterOffset: 100)
+        guard let after = proxy?.documentContextAfterInput, !after.isEmpty else { return }
+        if let firstNewlineIndex = after.firstIndex(of: "\n") {
+            let offset = after.distance(from: after.startIndex, to: firstNewlineIndex)
+            proxy?.adjustTextPosition(byCharacterOffset: offset)
+        } else {
+            proxy?.adjustTextPosition(byCharacterOffset: after.count)
+        }
     }
 
     @objc private func handleSelectAll() {

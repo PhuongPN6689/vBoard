@@ -9,6 +9,7 @@ public protocol KeyboardViewDelegate: AnyObject {
     func keyboardViewDidRequestNextKeyboard(_ keyboardView: KeyboardView)
     func keyboardViewDidDismiss(_ keyboardView: KeyboardView)
     func keyboardView(_ keyboardView: KeyboardView, didGlideWord word: String)
+    func keyboardViewDidRequestEmojiPicker(_ keyboardView: KeyboardView)
 }
 
 public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDelegate, KeyCalloutViewDelegate, TextEditingViewDelegate {
@@ -28,13 +29,29 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     public private(set) var isSymbolsLayerActive: Bool = false
     public private(set) var isNumberPadActive: Bool = false
     public private(set) var isDeveloperModeActive: Bool = false
+    public var isNumberRowActive: Bool = false {
+        didSet {
+            if oldValue != isNumberRowActive {
+                buildCurrentLayout()
+            }
+        }
+    }
     public private(set) weak var globeKeyView: KeyView?
     public private(set) var textEditingView: TextEditingView?
+    public private(set) var quickSettingsView: QuickSettingsView?
+    public private(set) var clipboardView: ClipboardView?
+    public private(set) var emojiPickerView: EmojiPickerView?
 
     public let suggestionBar = SuggestionBarView()
     public let glideTrailLayer = GlideTrailLayer()
     public let calloutView = KeyCalloutView()
     private let dismissButton = UIButton(type: .system)
+    private let gradientLayer = CAGradientLayer()
+
+    // One-handed Mode Side Panel
+    private let oneHandedSidePanel = UIView()
+    private let oneHandedSwapButton = UIButton(type: .system)
+    private let oneHandedExpandButton = UIButton(type: .system)
     private var panGesture: UIPanGestureRecognizer?
     private var isGlideTrackingActive: Bool = false
     private var glideTrackedChars: [Character] = []
@@ -110,15 +127,114 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         textEditingView?.frame = bounds
         textEditingView?.isHidden = false
         bringSubviewToFront(textEditingView!)
+        updateSuggestionBarVisibility()
     }
 
     public func hideTextEditingView() {
         textEditingView?.isHidden = true
+        updateSuggestionBarVisibility()
+    }
+
+    public func showQuickSettingsView(delegate: QuickSettingsViewDelegate?) {
+        if quickSettingsView == nil {
+            let qs = QuickSettingsView(frame: bounds)
+            qs.delegate = delegate
+            addSubview(qs)
+            quickSettingsView = qs
+        }
+        quickSettingsView?.frame = bounds
+        quickSettingsView?.updateUIState()
+        quickSettingsView?.isHidden = false
+        bringSubviewToFront(quickSettingsView!)
+        updateSuggestionBarVisibility()
+    }
+
+    public func hideQuickSettingsView() {
+        quickSettingsView?.isHidden = true
+        updateSuggestionBarVisibility()
+    }
+
+    public func showClipboardView(delegate: ClipboardViewDelegate?) {
+        if clipboardView == nil {
+            let cv = ClipboardView(frame: bounds)
+            cv.delegate = delegate
+            addSubview(cv)
+            clipboardView = cv
+        }
+        clipboardView?.delegate = delegate
+        clipboardView?.frame = bounds
+        clipboardView?.reloadData()
+        clipboardView?.isHidden = false
+        bringSubviewToFront(clipboardView!)
+        updateSuggestionBarVisibility()
+    }
+
+    public func hideClipboardView() {
+        clipboardView?.isHidden = true
+        updateSuggestionBarVisibility()
+    }
+
+    public func showEmojiPickerView(delegate: EmojiPickerViewDelegate?) {
+        if emojiPickerView == nil {
+            let epv = EmojiPickerView(frame: bounds)
+            epv.delegate = delegate
+            addSubview(epv)
+            emojiPickerView = epv
+        }
+        emojiPickerView?.delegate = delegate
+        emojiPickerView?.frame = bounds
+        emojiPickerView?.reloadContent()
+        emojiPickerView?.isHidden = false
+        bringSubviewToFront(emojiPickerView!)
+        updateSuggestionBarVisibility()
+    }
+
+    public func hideEmojiPickerView() {
+        emojiPickerView?.isHidden = true
+        updateSuggestionBarVisibility()
+    }
+
+    private func updateSuggestionBarVisibility() {
+        let isOverlayOpen = (textEditingView != nil && !textEditingView!.isHidden) ||
+                            (quickSettingsView != nil && !quickSettingsView!.isHidden) ||
+                            (clipboardView != nil && !clipboardView!.isHidden) ||
+                            (emojiPickerView != nil && !emojiPickerView!.isHidden)
+        let hasSuggestionBar = vBoardSettings.shared.isSuggestionBarEnabled && !isNumberPadActive
+        suggestionBar.isHidden = !hasSuggestionBar || isOverlayOpen
+
+        // Tuyệt đối vô hiệu hoá cử chỉ vuốt để nhập khi có bất kỳ màn hình lớp phủ nào đang mở
+        panGesture?.isEnabled = !isOverlayOpen
+        if isOverlayOpen {
+            glideTrailLayer.clear()
+            isGlideTrackingActive = false
+            glideTrackedChars.removeAll()
+        }
+        if !suggestionBar.isHidden {
+            bringSubviewToFront(suggestionBar)
+        }
+        setNeedsLayout()
+        layoutIfNeeded()
     }
 
     private func setupLayers() {
+        layer.insertSublayer(gradientLayer, at: 0)
         addSubview(suggestionBar)
         layer.addSublayer(glideTrailLayer)
+
+        // Setup One-Handed Side Panel
+        let sideConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+        oneHandedSwapButton.setImage(UIImage(systemName: "arrow.left.and.right", withConfiguration: sideConfig), for: .normal)
+        oneHandedSwapButton.tintColor = .secondaryLabel
+        oneHandedSwapButton.addTarget(self, action: #selector(handleOneHandedSwap), for: .touchUpInside)
+        oneHandedSidePanel.addSubview(oneHandedSwapButton)
+
+        oneHandedExpandButton.setImage(UIImage(systemName: "arrow.up.left.and.arrow.down.right", withConfiguration: sideConfig), for: .normal)
+        oneHandedExpandButton.tintColor = .secondaryLabel
+        oneHandedExpandButton.addTarget(self, action: #selector(handleOneHandedExpand), for: .touchUpInside)
+        oneHandedSidePanel.addSubview(oneHandedExpandButton)
+
+        oneHandedSidePanel.isHidden = true
+        addSubview(oneHandedSidePanel)
 
         let dismissConfig = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
         let dismissIcon = UIImage(systemName: "keyboard.chevron.compact.down", withConfiguration: dismissConfig) ?? UIImage(systemName: "chevron.down", withConfiguration: dismissConfig)
@@ -134,6 +250,32 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         buildCurrentLayout()
     }
 
+
+    @objc private func handleOneHandedSwap() {
+        let current = vBoardSettings.shared.oneHandedMode
+        vBoardSettings.shared.oneHandedMode = (current == .left) ? .right : .left
+        HapticManager.shared.playSpecialKey()
+        vBoardSettings.shared.notifySettingsChanged()
+        setNeedsLayout()
+        layoutIfNeeded()
+    }
+
+    @objc private func handleOneHandedExpand() {
+        vBoardSettings.shared.oneHandedMode = .off
+        HapticManager.shared.playSpecialKey()
+        vBoardSettings.shared.notifySettingsChanged()
+        setNeedsLayout()
+        layoutIfNeeded()
+    }
+
+    public func setShiftState(_ active: Bool) {
+        if isShiftActive != active && !isCapsLockActive {
+            isShiftActive = active
+            buildCurrentLayout()
+            updateSuggestionsCase()
+        }
+    }
+
     @objc private func handleDismissTap() {
         HapticManager.shared.playSpecialKey()
         delegate?.keyboardViewDidDismiss(self)
@@ -147,11 +289,111 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         self.panGesture = pan
     }
 
+    public override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer == panGesture {
+            // Không bao giờ bắt đầu vuốt nếu tính năng Glide Typing chưa được bật trong cài đặt
+            guard vBoardSettings.shared.isGlideTypingEnabled else { return false }
+
+            // Tuyệt đối không bắt đầu vuốt nếu Callout popup đang hiển thị
+            if calloutView.isVisible {
+                return false
+            }
+
+            let isOverlayOpen = (textEditingView != nil && !textEditingView!.isHidden) ||
+                                (quickSettingsView != nil && !quickSettingsView!.isHidden) ||
+                                (clipboardView != nil && !clipboardView!.isHidden) ||
+                                (emojiPickerView != nil && !emojiPickerView!.isHidden)
+            if isOverlayOpen || isNumberPadActive || isNumberLayerActive || isDeveloperModeActive {
+                return false
+            }
+
+            // Chỉ cho phép kích hoạt cử chỉ vuốt nếu bắt đầu trên phím chữ cái (a..z)
+            let loc = gestureRecognizer.location(in: self)
+            if let hitKey = findNearestKeyView(at: loc),
+               case .character(let charStr) = hitKey.key.type,
+               let first = charStr.first,
+               first.isLetter {
+                return true
+            } else {
+                return false
+            }
+        }
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
+
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if gestureRecognizer == panGesture {
+            // Không nhận touch cho vuốt nếu tính năng Glide Typing đang tắt
+            guard vBoardSettings.shared.isGlideTypingEnabled else { return false }
+
+            // Không nhận touch nếu Callout popup đang mở
+            if calloutView.isVisible {
+                return false
+            }
+
+            let isOverlayOpen = (textEditingView != nil && !textEditingView!.isHidden) ||
+                                (quickSettingsView != nil && !quickSettingsView!.isHidden) ||
+                                (clipboardView != nil && !clipboardView!.isHidden) ||
+                                (emojiPickerView != nil && !emojiPickerView!.isHidden)
+            if isOverlayOpen || isNumberPadActive || isNumberLayerActive || isDeveloperModeActive {
+                return false
+            }
+
+            // Chặn cử chỉ vuốt nếu chạm vào thanh công cụ hoặc bất kỳ màn hình lớp phủ nào
+            if let v = touch.view {
+                if v.isDescendant(of: suggestionBar) {
+                    return false
+                }
+                if let cv = clipboardView, v.isDescendant(of: cv) {
+                    return false
+                }
+                if let tev = textEditingView, v.isDescendant(of: tev) {
+                    return false
+                }
+                if let qs = quickSettingsView, v.isDescendant(of: qs) {
+                    return false
+                }
+                if let ep = emojiPickerView, v.isDescendant(of: ep) {
+                    return false
+                }
+                if v.isDescendant(of: calloutView) {
+                    return false
+                }
+            }
+
+            // Chỉ nhận touch nếu điểm chạm ban đầu nằm trên phím chữ cái
+            let loc = touch.location(in: self)
+            if let hitKey = findNearestKeyView(at: loc),
+               case .character(let charStr) = hitKey.key.type,
+               let first = charStr.first,
+               first.isLetter {
+                return true
+            } else {
+                return false
+            }
+        }
+        return true
+    }
+
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer == panGesture {
+            // Tuyệt đối không cho phép nhận diện đồng thời với cử chỉ cuộn danh sách (UIScrollView)
+            if otherGestureRecognizer.view is UIScrollView {
+                return false
+            }
+            let isOverlayOpen = (textEditingView != nil && !textEditingView!.isHidden) ||
+                                (quickSettingsView != nil && !quickSettingsView!.isHidden) ||
+                                (clipboardView != nil && !clipboardView!.isHidden) ||
+                                (emojiPickerView != nil && !emojiPickerView!.isHidden)
+            if isOverlayOpen || calloutView.isVisible {
+                return false
+            }
+        }
         return true
     }
 
     public func cancelAllKeyLongPresses() {
+        if calloutView.isVisible { return }
         for row in rowViews {
             for kv in row {
                 kv.cancelLongPress()
@@ -161,23 +403,44 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     }
 
     @objc private func handleGlidePan(_ pan: UIPanGestureRecognizer) {
-        guard vBoardSettings.shared.isGlideTypingEnabled, !isNumberPadActive, !isNumberLayerActive, !isDeveloperModeActive else { return }
+        let isOverlayOpen = (textEditingView != nil && !textEditingView!.isHidden) ||
+                            (quickSettingsView != nil && !quickSettingsView!.isHidden) ||
+                            (clipboardView != nil && !clipboardView!.isHidden) ||
+                            (emojiPickerView != nil && !emojiPickerView!.isHidden)
+        guard vBoardSettings.shared.isGlideTypingEnabled,
+              !isNumberPadActive,
+              !isNumberLayerActive,
+              !isDeveloperModeActive,
+              !isOverlayOpen,
+              !calloutView.isVisible else {
+            glideTrailLayer.clear()
+            isGlideTrackingActive = false
+            glideTrackedChars.removeAll()
+            return
+        }
 
         let loc = pan.location(in: self)
 
         switch pan.state {
         case .began:
-            cancelAllKeyLongPresses()
+            guard let hitKey = findNearestKeyView(at: loc),
+                  case .character(let charStr) = hitKey.key.type,
+                  let first = charStr.first,
+                  first.isLetter else {
+                pan.state = .cancelled
+                return
+            }
+            if !calloutView.isVisible {
+                cancelAllKeyLongPresses()
+            }
             isGlideTrackingActive = false
             glideTrackedChars.removeAll()
             glideTrailLayer.clear()
             lastGlidePoint = loc
-            // Bắt ngay phím đầu tiên tại điểm chạm bắt đầu!
-            if let hitKey = findNearestKeyView(at: loc), case .character(let charStr) = hitKey.key.type, let first = charStr.first {
-                glideTrackedChars.append(first)
-            }
+            glideTrackedChars.append(first)
 
         case .changed:
+            guard !calloutView.isVisible else { return }
             let translation = pan.translation(in: self)
             let distance = hypot(translation.x, translation.y)
             if distance > 6.0 {
@@ -188,7 +451,9 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             }
 
             if isGlideTrackingActive {
-                glideTrailLayer.addPoint(loc)
+                if vBoardSettings.shared.isGlideTrailEnabled {
+                    glideTrailLayer.addPoint(loc)
+                }
 
                 // Nội suy các điểm giữa lastGlidePoint và loc để không bỏ sót phím khi vuốt nhanh
                 let totalDist = hypot(loc.x - lastGlidePoint.x, loc.y - lastGlidePoint.y)
@@ -223,11 +488,13 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                     }
                 }
 
-                let matches = WordTrie.shared.matchGlide(keySequence: glideTrackedChars, limit: 3)
+                let rawMatches = WordTrie.shared.matchGlide(keySequence: glideTrackedChars, limit: 3)
+                let matches = rawMatches.map { self.formatSuggestionText($0) }
                 if let bestWord = matches.first {
                     HapticManager.shared.playSpecialKey()
                     delegate?.keyboardView(self, didGlideWord: bestWord)
                     suggestionBar.setSuggestions(matches)
+                    resetShiftIfNeeded()
                 }
             }
             glideTrailLayer.fadeOut()
@@ -245,19 +512,63 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         }
     }
 
-    // MARK: - Extended Edge Hit-Testing (Chấm dứt lỗi trượt phím A và L mép viền)
+    // MARK: - Extended Edge Hit-Testing (Chấm dứt lỗi trượt phím A và L mép viền & Bảo vệ Overlay)
     public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         if calloutView.isVisible {
             return super.hitTest(point, with: event)
         }
 
+        // 1. Kiểm tra màn hình Điều hướng văn bản (TextEditingView)
+        if let tev = textEditingView, !tev.isHidden, tev.alpha > 0.01 {
+            let pt = convert(point, to: tev)
+            if tev.point(inside: pt, with: event) {
+                return tev.hitTest(pt, with: event)
+            }
+        }
+
+        // 2. Kiểm tra màn hình Cài đặt nhanh (QuickSettingsView)
+        if let qs = quickSettingsView, !qs.isHidden, qs.alpha > 0.01 {
+            let pt = convert(point, to: qs)
+            if qs.point(inside: pt, with: event) {
+                return qs.hitTest(pt, with: event)
+            }
+        }
+
+        // 3. Kiểm tra màn hình Bảng tạm (ClipboardView)
+        if let cv = clipboardView, !cv.isHidden, cv.alpha > 0.01 {
+            let pt = convert(point, to: cv)
+            if cv.point(inside: pt, with: event) {
+                return cv.hitTest(pt, with: event)
+            }
+        }
+
+        // 4. Kiểm tra màn hình Emoji (EmojiPickerView)
+        if let epv = emojiPickerView, !epv.isHidden, epv.alpha > 0.01 {
+            let pt = convert(point, to: epv)
+            if epv.point(inside: pt, with: event) {
+                return epv.hitTest(pt, with: event)
+            }
+        }
+
+        // 5. Nếu đang mở overlay toàn màn hình, tuyệt đối không cho phép chạm xuyên qua xuống bàn phím
+        if (textEditingView != nil && !textEditingView!.isHidden) ||
+           (quickSettingsView != nil && !quickSettingsView!.isHidden) ||
+           (clipboardView != nil && !clipboardView!.isHidden) ||
+           (emojiPickerView != nil && !emojiPickerView!.isHidden) {
+            return nil
+        }
+
+        // 4. Thanh gợi ý / công cụ trên cùng
         if !suggestionBar.isHidden && suggestionBar.frame.contains(point) {
             return suggestionBar.hitTest(convert(point, to: suggestionBar), with: event)
         }
+
+        // 5. Phím hạ bàn phím
         if !dismissButton.isHidden && dismissButton.frame.contains(point) {
             return dismissButton
         }
 
+        // 6. Nhận diện phím bấm bàn phím
         if let nearestKey = findNearestKeyView(at: point) {
             return nearestKey
         }
@@ -364,7 +675,8 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         let settings = vBoardSettings.shared
         var rows: [[KeyboardKey]] = []
 
-        if settings.isNumberRowEnabled {
+        let hasNumberRow = settings.isNumberRowEnabled || isNumberRowActive
+        if hasNumberRow {
             let numberRow = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map { KeyboardKey.char($0) }
             rows.append(numberRow)
         }
@@ -379,36 +691,41 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         let r3Chars = ["z", "x", "c", "v", "b", "n", "m"]
         let r3Sec = ["*", "\"", "'", ":", ";", "!", "?"]
 
-        let showHints = settings.isHintSymbolsEnabled
-        let r1Sec = settings.isNumberRowEnabled ? r1SecSymbols : r1SecNumber
+        let r1Sec = hasNumberRow ? r1SecSymbols : r1SecNumber
 
         let row1 = zip(r1Chars, r1Sec).map { char, sec in
-            KeyboardKey.char(isShift ? char.uppercased() : char, secondary: showHints ? sec : nil)
+            KeyboardKey.char(isShift ? char.uppercased() : char, secondary: sec)
         }
 
         let row2 = zip(r2Chars, r2Sec).map { char, sec in
-            KeyboardKey.char(isShift ? char.uppercased() : char, secondary: showHints ? sec : nil)
+            KeyboardKey.char(isShift ? char.uppercased() : char, secondary: sec)
         }
 
         var row3: [KeyboardKey] = [KeyboardKey.shift(isCapsLocked: isCapsLockActive, isShiftActive: isShiftActive, weight: 1.55)]
         row3.append(contentsOf: zip(r3Chars, r3Sec).map { char, sec in
-            KeyboardKey.char(isShift ? char.uppercased() : char, secondary: showHints ? sec : nil)
+            KeyboardKey.char(isShift ? char.uppercased() : char, secondary: sec)
         })
         row3.append(KeyboardKey.delete(weight: 1.55))
 
         let isGlobeHidden = settings.isGlobeKeyHidden
+        let isCommaEnabled = settings.isCommaKeyEnabled
+        let isPeriodEnabled = settings.isPeriodKeyEnabled
 
         var row4: [KeyboardKey] = [
-            KeyboardKey.modeSwitch("?123", weight: 1.55),
-            KeyboardKey.char(",", secondary: showHints ? "☺" : nil, weight: 1.0)
+            KeyboardKey.modeSwitch("?123", weight: 1.55)
         ]
+        if isCommaEnabled {
+            row4.append(KeyboardKey.char(",", secondary: "☺", weight: 1.0))
+        }
         if !isGlobeHidden {
             row4.append(KeyboardKey.globe(weight: 1.0))
         } else {
             row4.append(KeyboardKey.emoji(weight: 1.0))
         }
         row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.0))
-        row4.append(KeyboardKey.char(".", weight: 1.0))
+        if isPeriodEnabled {
+            row4.append(KeyboardKey.char(".", weight: 1.0))
+        }
         row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.55))
 
         rows.append(row1)
@@ -449,10 +766,10 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         let row4: [KeyboardKey] = [
             KeyboardKey.modeSwitch("ABC", weight: 1.55),
-            KeyboardKey.char("<", weight: 1.0),
+            KeyboardKey.char("←", weight: 1.0),
             KeyboardKey.modeSwitch("12/34", weight: 1.0),
             KeyboardKey.space(label: "Tiếng Việt", weight: 4.0),
-            KeyboardKey.char(">", weight: 1.0),
+            KeyboardKey.char("→", weight: 1.0),
             KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.55)
         ]
 
@@ -486,11 +803,11 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         r3.append(KeyboardKey.delete(weight: 1.2))
         let r4: [KeyboardKey] = [
             KeyboardKey.modeSwitch("ABC", weight: 1.2),
-            KeyboardKey.char("->", weight: 1.0),
-            KeyboardKey.char("=>", weight: 1.0),
-            KeyboardKey.space(label: "Code", weight: 3.5),
+            KeyboardKey.char("⇤", weight: 1.0),
             KeyboardKey.char("←", weight: 1.0),
+            KeyboardKey.space(label: "Code", weight: 3.2),
             KeyboardKey.char("→", weight: 1.0),
+            KeyboardKey.char("⇥", weight: 1.0),
             KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "↵", weight: 1.2)
         ]
 
@@ -506,16 +823,38 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         if let tev = textEditingView, !tev.isHidden {
             tev.frame = bounds
+            bringSubviewToFront(tev)
+        }
+        if let qs = quickSettingsView, !qs.isHidden {
+            qs.frame = bounds
+            bringSubviewToFront(qs)
+        }
+        if let cv = clipboardView, !cv.isHidden {
+            cv.frame = bounds
+            bringSubviewToFront(cv)
+        }
+        if let epv = emojiPickerView, !epv.isHidden {
+            epv.frame = bounds
+            bringSubviewToFront(epv)
         }
 
-        let isSuggestionActive = vBoardSettings.shared.isSuggestionBarEnabled && !isNumberPadActive
-        suggestionBar.isHidden = !isSuggestionActive
+        let isOverlayOpen = (textEditingView != nil && !textEditingView!.isHidden) ||
+                            (quickSettingsView != nil && !quickSettingsView!.isHidden) ||
+                            (clipboardView != nil && !clipboardView!.isHidden) ||
+                            (emojiPickerView != nil && !emojiPickerView!.isHidden)
+
+        let hasSuggestionBar = vBoardSettings.shared.isSuggestionBarEnabled && !isNumberPadActive
+        suggestionBar.isHidden = !hasSuggestionBar || isOverlayOpen
 
         var topPadding: CGFloat = 3.0
-        if isSuggestionActive {
+        if hasSuggestionBar {
             let barHeight: CGFloat = 34.0
             suggestionBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: barHeight)
             topPadding = barHeight + 3.0
+        }
+
+        if !suggestionBar.isHidden {
+            bringSubviewToFront(suggestionBar)
         }
 
         glideTrailLayer.frame = bounds
@@ -539,12 +878,62 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         var currentY = topPadding
 
+        // One-Handed Mode calculation
+        let oneHanded = vBoardSettings.shared.oneHandedMode
+        let isOneHandedActive = (oneHanded != .off)
+        let keyboardWidth = isOneHandedActive ? bounds.width * 0.84 : bounds.width
+        let keyboardOriginX: CGFloat
+        let sidePanelWidth = bounds.width * 0.16
+
+        if oneHanded == .left {
+            keyboardOriginX = 0
+            oneHandedSidePanel.frame = CGRect(x: keyboardWidth, y: topPadding, width: sidePanelWidth, height: availableHeight)
+            oneHandedSidePanel.isHidden = false
+        } else if oneHanded == .right {
+            keyboardOriginX = sidePanelWidth
+            oneHandedSidePanel.frame = CGRect(x: 0, y: topPadding, width: sidePanelWidth, height: availableHeight)
+            oneHandedSidePanel.isHidden = false
+        } else {
+            keyboardOriginX = 0
+            oneHandedSidePanel.isHidden = true
+        }
+
+        if !oneHandedSidePanel.isHidden {
+            let halfH = availableHeight / 2.0
+            oneHandedSwapButton.frame = CGRect(x: 0, y: 0, width: sidePanelWidth, height: halfH)
+            oneHandedExpandButton.frame = CGRect(x: 0, y: halfH, width: sidePanelWidth, height: halfH)
+            bringSubviewToFront(oneHandedSidePanel)
+        }
+
+        // Gradient Layer handling
+        let theme = vBoardSettings.shared.colorTheme
+        if theme.isGradient {
+            gradientLayer.frame = bounds
+            gradientLayer.isHidden = false
+            switch theme {
+            case .gradientPastelRose:
+                gradientLayer.colors = [UIColor(red: 255/255, green: 229/255, blue: 236/255, alpha: 1.0).cgColor, UIColor(red: 240/255, green: 230/255, blue: 255/255, alpha: 1.0).cgColor]
+            case .gradientSkyBreeze:
+                gradientLayer.colors = [UIColor(red: 224/255, green: 242/255, blue: 254/255, alpha: 1.0).cgColor, UIColor(red: 237/255, green: 233/255, blue: 254/255, alpha: 1.0).cgColor]
+            case .gradientMintWhisper:
+                gradientLayer.colors = [UIColor(red: 230/255, green: 255/255, blue: 250/255, alpha: 1.0).cgColor, UIColor(red: 235/255, green: 248/255, blue: 255/255, alpha: 1.0).cgColor]
+            case .gradientTwilightPurple:
+                gradientLayer.colors = [UIColor(red: 30/255, green: 27/255, blue: 75/255, alpha: 1.0).cgColor, UIColor(red: 49/255, green: 46/255, blue: 129/255, alpha: 1.0).cgColor]
+            case .gradientDeepOcean:
+                gradientLayer.colors = [UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 1.0).cgColor, UIColor(red: 30/255, green: 41/255, blue: 59/255, alpha: 1.0).cgColor]
+            case .gradientSunsetGlow:
+                gradientLayer.colors = [UIColor(red: 45/255, green: 27/255, blue: 54/255, alpha: 1.0).cgColor, UIColor(red: 74/255, green: 21/255, blue: 75/255, alpha: 1.0).cgColor]
+            default:
+                break
+            }
+        } else {
+            gradientLayer.isHidden = true
+        }
+
         let standard10Spacing = 9.0 * keySpacing
-        let standardAvailableWidth = bounds.width - (sideMargin * 2) - standard10Spacing
+        let standardAvailableWidth = keyboardWidth - (sideMargin * 2) - standard10Spacing
         let stdKeyWidth = standardAvailableWidth / 10.0
-        // Calculate side function key width so row 3 (Shift + 7 letters + Delete) fills the exact same width as row 1 (10 keys)
-        // row 3 has 8 spacings between 9 keys (Shift, 7 letters, Delete)
-        let row3AvailableForKeys = bounds.width - (sideMargin * 2) - (8.0 * keySpacing)
+        let row3AvailableForKeys = keyboardWidth - (sideMargin * 2) - (8.0 * keySpacing)
         let sideFunctionKeyWidth = max(stdKeyWidth * 1.5, (row3AvailableForKeys - (7.0 * stdKeyWidth)) / 2.0)
 
         for (rowIndex, row) in rowViews.enumerated() {
@@ -560,14 +949,14 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                 let lastKeyWidth = sideFunctionKeyWidth
                 let middleKeys = row.dropFirst().dropLast()
                 let totalMiddleSpacing = CGFloat(row.count - 1) * keySpacing
-                let remainingForMiddle = bounds.width - (sideMargin * 2) - firstKeyWidth - lastKeyWidth - totalMiddleSpacing
+                let remainingForMiddle = keyboardWidth - (sideMargin * 2) - firstKeyWidth - lastKeyWidth - totalMiddleSpacing
 
                 // Phím giữa cố định (phẩy, chấm, chuyển ngữ): 1 stdKeyWidth; Space co dãn
                 let nonSpaceCount = CGFloat(middleKeys.filter { $0.key.type != .space }.count)
                 let nonSpaceWidth = nonSpaceCount * stdKeyWidth
                 let spaceWidth = max(stdKeyWidth * 2.0, remainingForMiddle - nonSpaceWidth)
 
-                var currentX = sideMargin
+                var currentX = keyboardOriginX + sideMargin
                 for (idx, keyView) in row.enumerated() {
                     let w: CGFloat
                     if idx == 0 {
@@ -575,7 +964,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                     } else if idx == row.count - 1 {
                         w = lastKeyWidth
                         // Căn thẳng hàng tuyệt đối với mép phải
-                        currentX = bounds.width - sideMargin - lastKeyWidth
+                        currentX = keyboardOriginX + keyboardWidth - sideMargin - lastKeyWidth
                     } else if case .space = keyView.key.type {
                         w = spaceWidth
                     } else {
@@ -592,7 +981,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             } else if isRow3 {
                 // Row 3: Shift (sideFunctionKeyWidth) + 7 ký tự (stdKeyWidth) + Delete (sideFunctionKeyWidth)
                 // Đảm bảo phím Shift bề ngang BẰNG ĐÚNG phím ?123, và phím Xóa bề ngang BẰNG ĐÚNG phím Enter
-                var currentX = sideMargin
+                var currentX = keyboardOriginX + sideMargin
                 for (idx, keyView) in row.enumerated() {
                     let w: CGFloat
                     if idx == 0 {
@@ -600,7 +989,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                     } else if idx == row.count - 1 {
                         w = sideFunctionKeyWidth
                         // Căn thẳng hàng tuyệt đối với phím Enter ngay bên dưới
-                        currentX = bounds.width - sideMargin - sideFunctionKeyWidth
+                        currentX = keyboardOriginX + keyboardWidth - sideMargin - sideFunctionKeyWidth
                     } else {
                         w = stdKeyWidth
                     }
@@ -615,7 +1004,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             } else if isLetterRow2 {
                 // Row 2 (a .. l): Thụt đều 0.5 phím hai bên mép
                 let row2Width = (9.0 * stdKeyWidth) + (8.0 * keySpacing)
-                var currentX = (bounds.width - row2Width) / 2.0
+                var currentX = keyboardOriginX + (keyboardWidth - row2Width) / 2.0
 
                 for keyView in row {
                     keyView.frame = CGRect(
@@ -628,11 +1017,11 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                 }
             } else {
                 let totalSpacing = (totalKeyCount - 1) * keySpacing
-                let availableWidth = bounds.width - (sideMargin * 2) - totalSpacing
+                let availableWidth = keyboardWidth - (sideMargin * 2) - totalSpacing
                 let totalFlexWeight = row.reduce(0.0) { $0 + $1.key.flexWeight }
                 let unitWidth = availableWidth / totalFlexWeight
 
-                var currentX = sideMargin
+                var currentX = keyboardOriginX + sideMargin
 
                 for keyView in row {
                     let keyWidth = unitWidth * keyView.key.flexWeight
@@ -647,6 +1036,33 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             }
 
             currentY += rowHeight + rowSpacing
+        }
+    }
+
+    // MARK: - Suggestion Casing & Shift Helpers
+    public func formatSuggestionText(_ text: String) -> String {
+        let lower = text.lowercased()
+        if isCapsLockActive {
+            return lower.uppercased()
+        } else if isShiftActive {
+            guard let first = lower.first else { return lower }
+            return String(first).uppercased() + lower.dropFirst()
+        } else {
+            return lower
+        }
+    }
+
+    public func updateSuggestionsCase() {
+        guard !suggestionBar.currentSuggestions.isEmpty else { return }
+        let updated = suggestionBar.currentSuggestions.map { formatSuggestionText($0) }
+        suggestionBar.setSuggestions(updated)
+    }
+
+    public func resetShiftIfNeeded() {
+        if isShiftActive && !isCapsLockActive && !isNumberLayerActive {
+            isShiftActive = false
+            buildCurrentLayout()
+            updateSuggestionsCase()
         }
     }
 
@@ -675,8 +1091,32 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             lastShiftTapTime = now
             buildCurrentLayout()
             HapticManager.shared.playSpecialKey()
+            updateSuggestionsCase()
+
+        case .character(let charStr):
+            if isSymbolsLayerActive {
+                if charStr == "←" || charStr == "<" {
+                    HapticManager.shared.playCursorTick()
+                    delegate?.keyboardView(self, didPressKey: KeyboardKey.char("←"))
+                    return
+                } else if charStr == "→" || charStr == ">" {
+                    HapticManager.shared.playCursorTick()
+                    delegate?.keyboardView(self, didPressKey: KeyboardKey.char("→"))
+                    return
+                }
+            }
+            if charStr == "'" && vBoardSettings.shared.isAutoSwitchToABCAfterApostropheEnabled && (isNumberLayerActive || isSymbolsLayerActive) {
+                setLettersMode()
+            }
+            if isShiftActive && !isCapsLockActive && !isNumberLayerActive {
+                isShiftActive = false
+                buildCurrentLayout()
+                updateSuggestionsCase()
+            }
+            delegate?.keyboardView(self, didPressKey: key)
 
         case .modeSwitch(let label):
+            hideEmojiPickerView()
             if label == "123" || label == "?123" {
                 isNumberPadActive = false
                 isNumberLayerActive = true
@@ -703,15 +1143,16 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         case .emoji:
             HapticManager.shared.playSpecialKey()
-            delegate?.keyboardView(self, didPressKey: KeyboardKey.char("😊"))
+            delegate?.keyboardViewDidRequestEmojiPicker(self)
 
         case .dismiss:
             handleDismissTap()
 
-        case .character, .space, .delete, .returnKey:
+        case .space, .delete, .returnKey:
             if isShiftActive && !isCapsLockActive && !isNumberLayerActive {
                 isShiftActive = false
                 buildCurrentLayout()
+                updateSuggestionsCase()
             }
             delegate?.keyboardView(self, didPressKey: key)
         }
@@ -731,12 +1172,38 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         let isShift = isShiftActive || isCapsLockActive
         let char = key.displayLabel
         var items = KeyCalloutView.calloutItems(for: char, isShift: isShift)
-        if items == nil, let sec = key.secondaryLabel {
-            items = [sec, char]
+
+        // Nếu phím có ký tự phụ secondaryLabel (ví dụ: hàng số tắt thì p có secondary "0"):
+        if let sec = key.secondaryLabel {
+            if items == nil {
+                items = [sec, char]
+            } else if !items!.contains(sec) {
+                items!.insert(sec, at: 0)
+            }
         }
+
         guard let calloutItems = items, !calloutItems.isEmpty else { return }
 
-        calloutView.show(items: calloutItems, defaultIndex: 0, sourceKey: keyView, in: self)
+        // Xác định defaultIndex phù hợp nhất:
+        var defaultIdx = 0
+        if char == "." {
+            // Đối với dấu chấm ".", ưu tiên chọn dấu phẩy "," (index 14) hoặc "?" (index 15) giống hình mẫu Gboard
+            if let commaIdx = calloutItems.firstIndex(of: ",") {
+                defaultIdx = commaIdx
+            } else if let qIdx = calloutItems.firstIndex(of: "?") {
+                defaultIdx = qIdx
+            }
+        } else if char == "," {
+            if let dotIdx = calloutItems.firstIndex(of: ".") {
+                defaultIdx = dotIdx
+            } else if let qIdx = calloutItems.firstIndex(of: "?") {
+                defaultIdx = qIdx
+            }
+        } else if let sec = key.secondaryLabel, let secIdx = calloutItems.firstIndex(of: sec) {
+            defaultIdx = secIdx
+        }
+
+        calloutView.show(items: calloutItems, defaultIndex: defaultIdx, sourceKey: keyView, in: self)
         bringSubviewToFront(calloutView)
     }
 
@@ -747,6 +1214,15 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     public func keyViewDidEndCallout(_ keyView: KeyView) -> String? {
         if let selected = calloutView.commitSelection() {
             HapticManager.shared.playKeyTap()
+            if selected == "⚙️" {
+                showQuickSettingsView(delegate: delegate as? QuickSettingsViewDelegate)
+                return selected
+            } else if selected == "📱" {
+                let cur = vBoardSettings.shared.oneHandedMode
+                vBoardSettings.shared.oneHandedMode = (cur == .off) ? .right : .off
+                vBoardSettings.shared.notifySettingsChanged()
+                return selected
+            }
             let simulatedKey = KeyboardKey.char(selected)
             delegate?.keyboardView(self, didPressKey: simulatedKey)
             return selected
@@ -760,6 +1236,15 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
     // MARK: - KeyCalloutViewDelegate
     public func keyCalloutView(_ calloutView: KeyCalloutView, didSelectItem text: String) {
+        if text == "⚙️" {
+            showQuickSettingsView(delegate: delegate as? QuickSettingsViewDelegate)
+            return
+        } else if text == "📱" {
+            let cur = vBoardSettings.shared.oneHandedMode
+            vBoardSettings.shared.oneHandedMode = (cur == .off) ? .right : .off
+            vBoardSettings.shared.notifySettingsChanged()
+            return
+        }
         let simulatedKey = KeyboardKey.char(text)
         delegate?.keyboardView(self, didPressKey: simulatedKey)
     }

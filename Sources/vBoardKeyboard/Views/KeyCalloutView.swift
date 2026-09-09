@@ -176,8 +176,8 @@ public final class KeyCalloutView: UIView {
 
     private func updateHighlight() {
         let isDark = traitCollection.userInterfaceStyle == .dark
-        let highlightBg = isDark ? UIColor(red: 102/255, green: 217/255, blue: 194/255, alpha: 1.0) : UIColor(red: 211/255, green: 227/255, blue: 253/255, alpha: 1.0)
-        let highlightText = isDark ? UIColor(red: 20/255, green: 20/255, blue: 20/255, alpha: 1.0) : UIColor(red: 11/255, green: 87/255, blue: 208/255, alpha: 1.0)
+        let highlightBg = isDark ? UIColor(red: 0/255, green: 137/255, blue: 123/255, alpha: 1.0) : UIColor(red: 26/255, green: 115/255, blue: 232/255, alpha: 1.0)
+        let highlightText = UIColor.white
         let defaultText = isDark ? UIColor.white : UIColor(red: 31/255, green: 31/255, blue: 31/255, alpha: 1.0)
 
         for (idx, label) in itemViews.enumerated() {
@@ -185,10 +185,13 @@ public final class KeyCalloutView: UIView {
                 label.backgroundColor = highlightBg
                 label.textColor = highlightText
                 label.font = UIFont.systemFont(ofSize: label.font.pointSize, weight: .bold)
+                label.layer.cornerRadius = min(label.bounds.width, label.bounds.height) / 2.0
+                label.layer.masksToBounds = true
             } else {
                 label.backgroundColor = .clear
                 label.textColor = defaultText
                 label.font = UIFont.systemFont(ofSize: label.font.pointSize, weight: .regular)
+                label.layer.cornerRadius = 6.0
             }
         }
     }
@@ -263,31 +266,18 @@ public final class KeyCalloutView: UIView {
         case "n":
             return isShift ? ["Ñ", "N"] : ["ñ", "n"]
 
-        // Phím chữ có ký hiệu phụ ở góc
-        case "q": return ["%"]
-        case "w": return ["\\"]
-        case "r": return ["="]
-        case "t": return ["["]
-        case "p": return ["]"]
-        case "s": return ["#"]
-        case "f": return ["_"]
-        case "g": return ["&"]
-        case "h": return ["-"]
-        case "j": return ["+"]
-        case "k": return ["("]
-        case "l": return [")"]
-        case "z": return ["*"]
-        case "x": return ["\""]
-        case "v": return [":"]
-        case "b": return [";"]
-        case "m": return ["?"]
-
-        // Dấu chấm câu và ký hiệu
+        // Dấu chấm câu và ký hiệu (Bảng lưới 2 hàng x 8 cột = 16 ký hiệu chuẩn Gboard)
         case ".":
-            return ["...", "?", "!", ",", ":", ";", "-", "_"]
+            return [
+                "&", "%", "+", "\"", "-", ":", "'", "@",
+                ";", "/", "(", ")", "#", "!", "?", "."
+            ]
         case ",":
-            // Bảng ký hiệu lưới chuẩn Gboard khi nhấn giữ phím phẩy
-            return ["&", "%", "+", "\"", "-", ":", "'", "@", ";", "/", "(", ")", "#", "!", ",", "?"]
+            // Bảng ký hiệu chuẩn Gboard kết hợp Swipe Callout Cài đặt & Một tay (Mục 18)
+            return [
+                "⚙️", "📱", "&", "%", "+", "\"", "-", ":",
+                ";", "/", "(", ")", "#", "!", ",", "?"
+            ]
 
         // Ký tự tiền tệ & toán học
         case "$": return ["₫", "€", "£", "¥", "¢", "$"]
