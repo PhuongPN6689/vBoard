@@ -13,11 +13,11 @@ public final class OpenKeyEngine: @unchecked Sendable {
     // MARK: - Biến Cấu Hình Công Khai (Tương đương các biến extern trong Engine.h)
     public var vLanguage: Int = 1                 // 0: English, 1: Vietnamese
     public var vInputType: OpenKeyInputType = .telex // 0: Telex, 1: VNI, 2: SimpleTelex1, 3: SimpleTelex2
-    public var vFreeMark: Int = 1                  // 0: Không bỏ dấu tự do, 1: Bỏ dấu tự do
+    public var vFreeMark: Int = 0                  // 0: Không bỏ dấu tự do (tuân thủ ngữ pháp), 1: Bỏ dấu tự do
     public var vCodeTable: Int = 0                 // 0: Unicode dựng sẵn, 1: TCVN3, 2: VNI, 3: Unicode tổ hợp
     public var vCheckSpelling: Int = 1             // 0: Không kiểm tra chính tả, 1: Kiểm tra chính tả
     public var vUseModernOrthography: Int = 1      // 0: oà, uý (cũ); 1: òa, úy (mới)
-    public var vQuickTelex: Int = 1                // 0: Tắt, 1: Bật (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th, uu=ươ)
+    public var vQuickTelex: Int = 0                // 0: Tắt (mặc định OpenKey), 1: Bật (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th, uu=ươ)
     public var vRestoreIfWrongSpelling: Int = 1    // 0: Không khôi phục, 1: Khôi phục phím gốc nếu sai chính tả
     public var vFixRecommendBrowser: Int = 1       // Sửa lỗi gợi ý URL trình duyệt
     public var vUseMacro: Int = 1                  // Gõ tắt bật/tắt
@@ -361,25 +361,29 @@ public final class OpenKeyEngine: @unchecked Sendable {
                 }
 
                 // 3. Kiểm tra phụ âm cuối
-                for ii in 0..<OpenKeyVietnameseData.endConsonantTable.count {
-                    spellingFlag = false
-                    let eRow = OpenKeyVietnameseData.endConsonantTable[ii]
-                    var jj = 0
-                    while jj < eRow.count {
-                        if spellingEndIndex > (k + jj) {
-                            let expected = eRow[jj]
-                            let ch = chr(k + jj)
-                            if (expected & ~(vQuickEndConsonant != 0 ? OpenKeyMask.endConsonant : 0)) != ch {
-                                spellingFlag = true
-                                break
+                if k == spellingEndIndex {
+                    spellingOK = true
+                } else {
+                    for ii in 0..<OpenKeyVietnameseData.endConsonantTable.count {
+                        spellingFlag = false
+                        let eRow = OpenKeyVietnameseData.endConsonantTable[ii]
+                        var jj = 0
+                        while jj < eRow.count {
+                            if spellingEndIndex > (k + jj) {
+                                let expected = eRow[jj]
+                                let ch = chr(k + jj)
+                                if (expected & ~(vQuickEndConsonant != 0 ? OpenKeyMask.endConsonant : 0)) != ch {
+                                    spellingFlag = true
+                                    break
+                                }
                             }
+                            jj += 1
                         }
-                        jj += 1
-                    }
-                    if spellingFlag { continue }
-                    if (k + jj) >= spellingEndIndex {
-                        spellingOK = true
-                        break
+                        if spellingFlag { continue }
+                        if (k + jj) >= spellingEndIndex {
+                            spellingOK = true
+                            break
+                        }
                     }
                 }
 
@@ -607,6 +611,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
                 hookState.charData[kk] = getCharacterCode(typingWord[ii])
                 kk -= 1
             }
+            hookState.backspaceCount = UInt8(index - vowelStartIndex)
             tempDisableKey = true
         } else {
             // Xóa dấu cũ và thêm dấu mới
@@ -921,7 +926,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
     }
 
     private func checkForStandaloneChar(_ data: UInt16, _ isCaps: Bool, _ keyWillReverse: UInt32) {
-        if chr(index - 1) == UInt16(keyWillReverse) && (typingWord[index - 1] & OpenKeyMask.toneW) != 0 {
+        if index > 0 && chr(index - 1) == UInt16(keyWillReverse) && (typingWord[index - 1] & OpenKeyMask.toneW) != 0 {
             hookState.code = .vWillProcess
             hookState.backspaceCount = 1
             hookState.newCharCount = 1
@@ -1217,6 +1222,21 @@ public final class OpenKeyEngine: @unchecked Sendable {
                     if isKeyDouble(data) {
                         insertAOE(keyForAEO, isCaps)
                     } else if isKeyW(data) {
+                        if vInputType == .vni {
+                            var vei = index - 1
+                            for j in stride(from: index - 1, through: 0, by: -1) {
+                                let c = chr(j)
+                                if c == OpenKeyCode.o || c == OpenKeyCode.u || c == OpenKeyCode.a || c == OpenKeyCode.e {
+                                    vei = j
+                                    break
+                                }
+                            }
+                            let cVei = chr(vei)
+                            if (data == OpenKeyCode.num7 && cVei == OpenKeyCode.a && (vei - 1 >= 0 ? chr(vei - 1) != OpenKeyCode.u : true)) ||
+                               (data == OpenKeyCode.num8 && (cVei == OpenKeyCode.o || cVei == OpenKeyCode.u)) {
+                                break
+                            }
+                        }
                         insertW(keyForAEO, isCaps)
                     }
                     break

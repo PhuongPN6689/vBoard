@@ -65,9 +65,9 @@ struct OpenKeyEngineTests {
             ("ar", "ả"),
             ("ax", "ã"),
             ("aj", "ạ"),
-            ("vietj", "việt"),
+            ("vieetj", "việt"),
             ("nam", "nam"),
-            ("tiengs", "tiếng"),
+            ("tieengs", "tiếng"),
             ("yeu", "yeu")
         ]
 
@@ -80,15 +80,15 @@ struct OpenKeyEngineTests {
     @Test("Kiểm tra vị trí đặt dấu thanh chuẩn mới (Modern Orthography)")
     func testModernOrthographyTonePlacement() {
         let adapter = OpenKeyEngineAdapter()
-        adapter.engine.vUseModernOrthography = 1
+        adapter.engine.vUseModernOrthography = 1 // Kiểu mới: dấu đặt ở nguyên âm chính (hoá, thuý)
 
         let testCases: [(input: String, expected: String)] = [
-            ("hoas", "hóa"),
-            ("thuys", "thúy"),
+            ("hoas", "hoá"),
+            ("thuys", "thuý"),
             ("toans", "toán"),
-            ("tiens", "tiến"),
+            ("tieens", "tiến"),
             ("hoangf", "hoàng"),
-            ("khuyenr", "khuyển")
+            ("khuyeern", "khuyển")
         ]
 
         for test in testCases {
@@ -100,11 +100,11 @@ struct OpenKeyEngineTests {
     @Test("Kiểm tra vị trí đặt dấu thanh chuẩn cũ (Classic Orthography)")
     func testClassicOrthographyTonePlacement() {
         let adapter = OpenKeyEngineAdapter()
-        adapter.engine.vUseModernOrthography = 0 // Kiểu cũ
+        adapter.engine.vUseModernOrthography = 0 // Kiểu cũ: dấu đặt ở âm đệm (hóa, thúy)
 
         let testCases: [(input: String, expected: String)] = [
-            ("hoas", "hoá"),
-            ("thuys", "thuý")
+            ("hoas", "hóa"),
+            ("thuys", "thúy")
         ]
 
         for test in testCases {
@@ -124,7 +124,10 @@ struct OpenKeyEngineTests {
             ("axx", "ax"),
             ("ajj", "aj"),
             ("toanss", "toans"),
-            ("dddd", "dd")
+            ("hoangff", "hoangf"),
+            ("tieengss", "tiêngs"),
+            ("nguowiff", "ngươif"),
+            ("ddd", "dd")
         ]
 
         for test in testCases {
@@ -185,8 +188,6 @@ struct OpenKeyEngineTests {
     @Test("Đo lường hiệu năng xử lý ký tự OpenKeyEngine (< 0.05ms)")
     func testPerformanceOpenKey() {
         let adapter = OpenKeyEngineAdapter()
-        let testText = "con caos naauf nhaary qua con chos luowif bieengs vBoard OpenKey 2026"
-
         let iterations = 10_000
         let start = DispatchTime.now()
 
@@ -201,4 +202,184 @@ struct OpenKeyEngineTests {
         print("\n⚡️ TỐC ĐỘ XỬ LÝ OPENKEY SWIFT: \(String(format: "%.4f", timePerKeystrokeMs)) ms / ký tự (\(iterations) lần gõ)")
         #expect(timePerKeystrokeMs < 0.05, "Tốc độ xử lý OpenKeyEngine phải dưới 0.05ms/lần gõ")
     }
+
+    @Test("Kiểm tra toàn diện kho từ vựng tiếng Việt thực tế")
+    func testExtensiveVietnameseWords() {
+        let adapter = OpenKeyEngineAdapter()
+
+        let testCases: [(input: String, expected: String)] = [
+            // Các từ với qu
+            ("qua", "qua"), ("quas", "quá"), ("quaf", "quà"), ("quar", "quả"),
+            ("quan", "quan"), ("quans", "quán"), ("quanf", "quàn"), ("quanr", "quản"), ("quang", "quang"),
+            ("quangs", "quáng"), ("quangr", "quảng"), ("quaan", "quân"), ("quaans", "quấn"), ("quaanf", "quần"),
+            ("quaanj", "quận"), ("quoocs", "quốc"), ("quyeets", "quyết"), ("quyeenf", "quyền"),
+            ("quys", "quý"), ("quyf", "quỳ"), ("quyr", "quỷ"), ("queetj", "quệt"), ("quets", "quét"),
+            ("queets", "quết"), ("queen", "quên"), ("quanh", "quanh"), ("quyeenr", "quyển"),
+
+            // Các từ với gi
+            ("gia", "gia"), ("gias", "giá"), ("giaf", "già"), ("giarm", "giảm"), ("gianr", "giản"),
+            ("gians", "gián"), ("giao", "giao"), ("giaos", "giáo"), ("giayf", "giày"), ("giaays", "giấy"),
+            ("gio", "gio"), ("gios", "gió"), ("giojt", "giọt"), ("gioongs", "giống"), ("giups", "giúp"),
+            ("giuwxa", "giữa"), ("giuwx", "giữ"), ("giuowngf", "giường"), ("gieengs", "giếng"),
+            ("ginf", "gìn"), ("giawcj", "giặc"), ("giawtj", "giặt"),
+
+            // Các từ với d / đ
+            ("dda", "đa"), ("ddas", "đá"), ("ddax", "đã"), ("dduowcj", "được"), ("dduowngf", "đường"),
+            ("ddoanf", "đoàn"), ("ddoans", "đoán"), ("ddaafu", "đầu"), ("ddaayf", "đầy"), ("ddeem", "đêm"),
+            ("ddieemr", "điểm"), ("ddieeuf", "điều"), ("ddieeur", "điểu"), ("ddoanj", "đoạn"), ("ddepj", "đẹp"),
+            ("ddeens", "đến"), ("ddaay", "đây"), ("ddoos", "đố"),
+
+            // Diphthongs và nguyên âm ghép
+            ("nguowif", "người"), ("nuowsc", "nước"), ("buowsc", "bước"), ("muownj", "mượn"),
+            ("huowng", "hương"), ("thuowng", "thương"), ("ruowuj", "rượu"), ("vuowfn", "vườn"),
+            ("tieenf", "tiền"), ("tieens", "tiến"), ("tieengs", "tiếng"), ("bieets", "biết"),
+            ("vieets", "viết"), ("kieemr", "kiểm"), ("mieenf", "miền"), ("bieenr", "biển"),
+            ("chieens", "chiến"), ("rieeng", "riêng"), ("hieenj", "hiện"), ("ddieenj", "điện"),
+            ("yeu", "yeu"), ("yeems", "yếm"), ("yeens", "yến"), ("chuyeens", "chuyến"),
+            ("chuyeenj", "chuyện"), ("thuyeenf", "thuyền"), ("khuyen", "khuyen"), ("khuyeens", "khuyến"),
+            ("tuyeets", "tuyết"), ("duyeetj", "duyệt"), ("khuyeets", "khuyết"),
+            ("muoons", "muốn"), ("cuoons", "cuốn"), ("uoongs", "uống"), ("buoonf", "buồn"),
+            ("chuoojt", "chuột"), ("luoon", "luôn"), ("ruoongj", "ruộng"), ("thuoocj", "thuộc"),
+            ("nguoonf", "nguồn"),
+            ("mias", "mía"), ("tias", "tía"), ("chia", "chia"), ("chias", "chía"),
+            ("khuya", "khuya"), ("chua", "chua"), ("muas", "múa"), ("mua", "mua"),
+            ("cuwar", "cửa"), ("muwa", "mưa"), ("chuwa", "chưa"), ("luwar", "lửa"), ("suwax", "sữa"),
+            ("khuyru", "khuỷu"), ("thuowr", "thuở"),
+            ("khoai", "khoai"), ("loaij", "loại"), ("thoair", "thoải"), ("xoaif", "xoài"),
+            ("tuowi", "tươi"), ("cuowif", "cười"), ("muowif", "mười"), ("duowis", "dưới"), ("buowir", "bưởi"),
+            ("bawts", "bắt"), ("chawtj", "chặt"), ("nawngs", "nắng"), ("mawts", "mắt"), ("tawms", "tắm"),
+            ("trawngs", "trắng"), ("lawnj", "lặn"),
+            ("maast", "mất"), ("thaatj", "thật"), ("caan", "cân"), ("chaan", "chân"), ("saan", "sân"),
+            ("ddaast", "đất"), ("taast", "tất"), ("nhaast", "nhất"), ("caasp", "cấp")
+        ]
+
+        var failedList: [(input: String, expected: String, actual: String)] = []
+        for test in testCases {
+            let result = typeString(test.input, adapter: adapter)
+            if result != test.expected {
+                failedList.append((test.input, test.expected, result))
+            }
+        }
+
+        if !failedList.isEmpty {
+            var msg = "Các từ gõ sai (\(failedList.count) từ):\n"
+            for fail in failedList {
+                msg += "- Gõ '\(fail.input)' -> Kỳ vọng: '\(fail.expected)', Thực tế: '\(fail.actual)'\n"
+            }
+            print(msg)
+            #expect(failedList.isEmpty, "Có từ gõ không ra đúng")
+        }
+    }
+
+    @Test("Kiểm tra các trường hợp biên nâng cao về âm tiết và ngữ âm tiếng Việt")
+    func testAdvancedEdgeCases() {
+        let adapter = OpenKeyEngineAdapter()
+
+        let testCases: [(input: String, expected: String)] = [
+            // 1. Phím W đứng một mình hoặc đầu từ
+            ("w", "ư"),
+            ("W", "Ư"),
+            ("wa", "ưa"), // w -> ư, thêm a thành ưa
+            ("uw", "ư"),
+            ("ow", "ơ"),
+            ("aw", "ă"),
+            ("uow", "ươ"),
+            ("uowng", "ương"),
+            ("uowsc", "ước"),
+            ("uowi", "ươi"),
+
+            // 2. Bỏ dấu ở giữa từ (Mid-word tone placement)
+            ("toasn", "toán"),
+            ("toafn", "toàn"),
+            ("vieejt", "việt"),
+            ("bieest", "biết"),
+
+            // 3. Chuỗi có chữ hoa, dấu câu và số
+            ("Vieetj Nam", "Việt Nam"),
+            ("Haf Nooij", "Hà Nội"),
+            ("Ddaf Nawxng", "Đà Nẵng"),
+            ("COVID-19", "COVID-19"),
+
+            // 4. Nguyên âm uy / uya / uye
+            ("chuyeens", "chuyến"),
+            ("thuyeenf", "thuyền"),
+            ("khuyeens", "khuyến"),
+            ("tuyeets", "tuyết"),
+            ("duyeetj", "duyệt"),
+            ("khuyeets", "khuyết"),
+            ("khuya", "khuya"),
+            ("huyts", "huýt"),
+
+            // 5. Khôi phục phím z và gỡ dấu
+            ("toansz", "toan"),
+            ("casz", "ca"),
+            ("vieetjz", "viêt"), // z chỉ gỡ dấu thanh, giữ nguyên mũ
+
+            // 6. Cụm phụ âm gi và qu với các nguyên âm đặc biệt
+            ("quowr", "quở"),
+            ("quoor", "quổ"),
+            ("gieengs", "giếng"),
+            ("gieets", "giết"),
+            ("giair", "giải")
+        ]
+
+        var failedList: [(input: String, expected: String, actual: String)] = []
+        for test in testCases {
+            let result = typeString(test.input, adapter: adapter)
+            if result != test.expected {
+                failedList.append((test.input, test.expected, result))
+            }
+        }
+
+        if !failedList.isEmpty {
+            var msg = "Trường hợp biên nâng cao bị sai (\(failedList.count) từ):\n"
+            for fail in failedList {
+                msg += "- Gõ '\(fail.input)' -> Kỳ vọng: '\(fail.expected)', Thực tế: '\(fail.actual)'\n"
+            }
+            print(msg)
+            #expect(failedList.isEmpty, "Có từ gõ biên không ra đúng")
+        }
+    }
+
+    @Test("Kiểm tra kiểu gõ VNI cơ bản và dấu thanh số (1-9)")
+    func testVNIBasic() {
+        let adapter = OpenKeyEngineAdapter()
+        adapter.engine.vInputType = .vni
+
+        let testCases: [(input: String, expected: String)] = [
+            ("a1", "á"),
+            ("a2", "à"),
+            ("a3", "ả"),
+            ("a4", "ã"),
+            ("a5", "ạ"),
+            ("a6", "â"),
+            ("a8", "ă"),
+            ("e6", "ê"),
+            ("o6", "ô"),
+            ("o7", "ơ"),
+            ("u7", "ư"),
+            ("d9", "đ"),
+            ("toan1", "toán"),
+            ("viet65", "việt"),
+            ("tie6ng1", "tiếng")
+        ]
+
+        var failedList: [(input: String, expected: String, actual: String)] = []
+        for test in testCases {
+            let result = typeString(test.input, adapter: adapter)
+            if result != test.expected {
+                failedList.append((test.input, test.expected, result))
+            }
+        }
+
+        if !failedList.isEmpty {
+            var msg = "VNI bị sai (\(failedList.count) từ):\n"
+            for fail in failedList {
+                msg += "- Gõ '\(fail.input)' -> Kỳ vọng: '\(fail.expected)', Thực tế: '\(fail.actual)'\n"
+            }
+            print(msg)
+            #expect(failedList.isEmpty, "Có từ gõ VNI không ra đúng")
+        }
+    }
 }
+

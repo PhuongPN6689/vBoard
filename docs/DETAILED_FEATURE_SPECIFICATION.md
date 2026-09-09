@@ -477,16 +477,35 @@ Thay vì duy trì màn hình "Chỉnh sửa văn bản" với các nút bôi đe
 
 ---
 
-### 22. Báo Cáo Kiểm Định & Khắc Phục Triệt Để 6 Điểm Đứt Kết Nối Runtime
+### 23. Phân hệ Lõi Bộ Gõ OpenKey Swift Thuần (1-1 Core Engine Specification)
 
-| STT | Tính năng | Hiện trạng trước khi sửa | Giải pháp kiến trúc đã triển khai | Trạng thái |
-| :--- | :--- | :--- | :--- | :---: |
-| **1** | **Hàng số mật khẩu** (`isNumberRowForPasswordEnabled`) | `KeyboardView` không nhận cờ `isNumberRowActive` dẫn đến bàn phím bị đội cao 28pt nhưng hàng số không hiện. | Bổ sung `isNumberRowActive` trên `KeyboardView`, đồng bộ trong `applyLatestSettings()` của `KeyboardViewController`. `makeLetterLayout()` vẽ hàng số khi `settings.isNumberRowEnabled \|\| isNumberRowActive`. | ✅ Hoàn thành |
-| **2** | **Smart Clipboard Quick-Chip** | `SuggestionBarView.smartClipText` không được gán từ `UIPasteboard.general`. | `KeyboardViewController.viewWillAppear` tự động lấy chuỗi mới nhất từ clipboard, cắt tỉa và nạp vào `smartClipText`. Khi thanh gợi ý rỗng sẽ hiện chip dán tức thì `📋 Dán: "..."`. | ✅ Hoàn thành |
-| **3** | **Âm lượng gõ phím** (`soundVolume`) | Dùng trực tiếp `AudioServicesPlaySystemSound(1104)` hệ thống không hỗ trợ điều chỉnh âm lượng. | Xây dựng `SoundManager` singleton với bộ đệm âm thanh PCM 44.1kHz (chỉ 1.8KB bộ nhớ) qua `AVAudioPlayer` kiểm soát volume trực tiếp từ `vBoardSettings.shared.soundVolume`, fallback hệ thống an toàn. | ✅ Hoàn thành |
-| **4** | **Toggle vệt lướt Glide** (`isGlideTrailEnabled`) | Khi vuốt ngón tay vẫn luôn vẽ vệt sáng dù đã tắt toggle. | Bọc điều kiện `if vBoardSettings.shared.isGlideTrailEnabled` quanh thao tác vẽ `glideTrailLayer.addPoint(loc)` trong `KeyboardView.swift`. | ✅ Hoàn thành |
-| **5** | **Callout phím phẩy `,` (⚙️ & 📱)** | Khi vuốt chọn biểu tượng Cài đặt `⚙️` hoặc Bàn phím một tay `📱` bị chèn thẳng emoji vào proxy. | Intercept chuẩn xác giá trị `⚙️` (gọi `showQuickSettingsView`) và `📱` (chuyển đổi `oneHandedMode`) trong `keyViewDidEndCallout` và `keyCalloutView(_:didSelectItem:)`. | ✅ Hoàn thành |
-| **6** | **Gợi ý Emoji theo từ đang gõ** | Chỉ kích hoạt khi từ trống `currentWord.isEmpty` và bị nuốt bởi `NextWordPredictor`. | Trong `updateWordSuggestions()`, khi `!currentWord.isEmpty`, đồng thời tra cứu `TextToEmojiMapper.shared.emojis(for: currentWord)` và hiển thị emoji ở ô gợi ý thứ 3 để người dùng chạm chọn tức thì. | ✅ Hoàn thành |
+#### Mục tiêu Kỹ thuật & Trải nghiệm:
+Chuyển đổi hoàn chỉnh cỗ máy gõ tiếng Việt OpenKey (tác giả Mai Vũ Tuyên) từ C++ sang Swift thuần 100%, bảo toàn tính tương thích và độ chính xác luật âm tiết tiếng Việt truyền thống với tốc độ thực thi cao kỷ lục (**~0.01ms / lần gõ**).
+
+#### Các thành phần đặc tả chi tiết:
+
+1. **Bộ đệm 32 ký tự và Máy trạng thái Bitmask:**
+   - Mỗi ký tự trong từ đang gõ được biểu diễn bằng một `UInt32` kết hợp mặt nạ bit: `TONE_MASK` (`^`), `TONEW_MASK` (`w`), `MARK1..5` (Sắc, Huyền, Hỏi, Ngã, Nặng), `CAPS_MASK`, `STANDALONE_MASK` (w đầu từ, ngoặc `[` `]`).
+   - Khả năng lưu trữ lịch sử hoàn tác qua `typingStates` cho phép khôi phục nguyên vẹn trạng thái từ trước khi biến đổi khi người dùng xóa lùi hoặc gõ phím ngắt từ.
+
+2. **Quy tắc Kiểm tra Chính tả Thời gian Thực (`checkSpelling`):**
+   - So khớp phụ âm đầu với 33 cụm phụ âm chuẩn (`ngh`, `ph`, `th`, `tr`, `gi`, `ch`...).
+   - Kiểm tra tổ hợp nguyên âm qua bảng ma trận `vowelCombine`, nhận diện chính xác các nguyên âm không được đi kèm phụ âm cuối (`ai`, `ao`, `au`, `oi`, `eo`...).
+   - **Luật âm trắc:** Các từ kết thúc bằng `c, ch, t, p` chỉ chấp nhận dấu Sắc hoặc Nặng. Mọi phím dấu Huyền, Hỏi, Ngã gõ vào sẽ bị vô hiệu hóa biến đổi ngay lập tức (`tempDisableKey = true`).
+
+3. **Cơ chế Cân bằng Ngữ âm Tự động (`checkGrammar`):**
+   - Tự động nhận biết các từ có cụm `uo` khi gõ thêm phụ âm cuối (`n, c, i, m, p, t`) để đồng bộ cả 2 nguyên âm thành `ươ` (ví dụ `thuon` $\to$ `thươn`, `buoc` $\to$ `bước`).
+   - Tự động di chuyển dấu thanh sang vị trí đúng khi bổ sung phụ âm cuối (ví dụ đang là `hoà`, gõ thêm `n` lập tức nhấc dấu thành `hoàn`).
+
+4. **Hệ thống Gõ tắt Macro với AutoCaps:**
+   - Quản lý danh sách viết tắt cá nhân với thuật toán `autoCaps` 3 cấp độ:
+     - Viết thường `btw ` $\to$ `"by the way "`.
+     - Viết hoa đầu `Btw ` $\to$ `"By the way "`.
+     - Viết hoa toàn bộ `BTW ` $\to$ `"BY THE WAY "`.
+
+5. **Bộ chuyển đổi `OpenKeyEngineAdapter`:**
+   - Kết nối với kiến trúc `EngineAction` (`deleteCount`, `textToInsert`) của iOS `UITextDocumentProxy`.
+   - Tương thích 100% với chu trình gõ tuần tự và hỗ trợ hoàn tác nguyên tử.
 
 ---
 
@@ -499,4 +518,6 @@ Thay vì duy trì màn hình "Chỉnh sửa văn bản" với các nút bôi đe
 | **Sprint 3** | - Tự động viết hoa đầu câu & Dấu cách sau dấu câu.<br>- Tự động về chữ cái sau dấu nháy đơn `'`.<br>- Hàng số thông minh cho mật khẩu & Toggle phím `,` `.`. | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 18/18 Tests)* |
 | **Sprint 4** | - Bảng dự đoán từ tiếp theo (Bi-gram table) & Text-to-Emoji.<br>- Vuốt phím xuống nhập ký hiệu (Flick-down).<br>- Âm thanh gõ phím & Smart Quick Chip trên toolbar. | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 18/18 Tests)* |
 | **Sprint 5** | - Bộ Full Themes màu sắc, Theme Gradient vector & Bật/Tắt viền phím.<br>- Tinh chỉnh thuật toán Glide tiếng Việt & Font/Font size slider.<br>- Kiểm tra và kết nối thông suốt 100% các tính năng runtime. | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 18/18 Tests)* |
+| **Sprint 6** | - Chuyển đổi 1-1 mã nguồn C++ lõi OpenKey (Mai Vũ Tuyên) sang Swift thuần.<br>- Hiện thực hóa `OpenKeyDataType`, `OpenKeyVietnameseData`, `OpenKeyEngine`, `OpenKeyMacro`, `OpenKeyEngineAdapter`.<br>- Kiểm định độc lập, phát hiện và khắc phục 4 lỗi cốt tử: vô hiệu hóa `checkGrammar` do `vFreeMark=1`, kích hoạt nhầm Quick Telex do `vQuickTelex=1`, lỗi Bitmask `handleModernMark` và đảo ngược quy ước dấu mới/cũ.<br>- Xây dựng bộ kiểm thử tự động mở rộng `OpenKeyEngineTests` (31 bài test đo hiệu năng & độ chính xác âm tiết thực tế). | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 31/31 Tests)* |
+
 

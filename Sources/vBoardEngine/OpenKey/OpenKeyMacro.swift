@@ -110,11 +110,13 @@ public final class OpenKeyMacroManager: @unchecked Sendable {
             if isAllUpper {
                 // Biến toàn bộ thành chữ hoa
                 for i in 0..<transformed.count {
-                    transformed[i] |= OpenKeyMask.caps
+                    if (transformed[i] & OpenKeyMask.charMask) != UInt32(OpenKeyCode.space) {
+                        transformed[i] |= OpenKeyMask.caps
+                    }
                 }
             } else if isFirstUpper {
                 // Biến ký tự đầu thành chữ hoa
-                if !transformed.isEmpty {
+                if !transformed.isEmpty && (transformed[0] & OpenKeyMask.charMask) != UInt32(OpenKeyCode.space) {
                     transformed[0] |= OpenKeyMask.caps
                 }
             }

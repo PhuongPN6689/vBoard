@@ -88,7 +88,15 @@ struct VietnameseEngineTests {
             ("uow", "ươ"),
             ("dd", "đ"),
             ("w", "ư"),
-            ("DD", "Đ")
+            ("DD", "Đ"),
+            ("motoj", "một"),
+            ("motjo", "một"),
+            ("vietej", "việt"),
+            ("vietje", "việt"),
+            ("bepes", "bếp"),
+            ("bepse", "bếp"),
+            ("tienges", "tiếng"),
+            ("namws", "nắm")
         ]
 
         for (input, expected) in testCases {

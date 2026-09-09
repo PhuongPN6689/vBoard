@@ -187,11 +187,6 @@ public final class VietnameseEngine: @unchecked Sendable {
             return nil
         }
 
-        // Nếu từ đã có phụ âm cuối và phím bấm không phải 'w', không biến đổi nguyên âm nữa
-        if !parsed.suffix.isEmpty && lowerChar != "w" {
-            return nil
-        }
-
         // Xử lý 'w': biến a->ă, o->ơ, u->ư, uo->ươ, ua->ưa
         if lowerChar == "w" {
             let vCount = parsed.vowels.count
@@ -270,24 +265,22 @@ public final class VietnameseEngine: @unchecked Sendable {
             }
         }
 
-        // Xử lý phím lặp nguyên âm: a+a -> â, e+e -> ê, o+o -> ô
-        if let lastIdx = parsed.vowels.indices.last {
-            let v = parsed.vowels[lastIdx]
+        // Xử lý phím lặp nguyên âm: a+a -> â, e+e -> ê, o+o -> ô (kể cả gõ trễ sau phụ âm cuối như mot+o -> môt, viet+e -> viêt)
+        if let targetIdx = parsed.vowels.indices.last(where: { Character(parsed.vowels[$0].base.lowercased()) == lowerChar }) {
+            let v = parsed.vowels[targetIdx]
             let baseLower = Character(v.base.lowercased())
 
-            if lowerChar == baseLower {
-                if (baseLower == "a" || baseLower == "e" || baseLower == "o") {
-                    if v.shape == .circumflex && isAutoUndoEnabled {
-                        // Undo: â + a -> aa, ê + e -> ee, ô + o -> oo
-                        parsed.vowels[lastIdx].shape = .plain
-                        let newWord = parsed.render(style: diacriticStyle) + String(char)
-                        return EngineAction(deleteCount: word.count, textToInsert: newWord)
-                    }
-
-                    parsed.vowels[lastIdx].shape = .circumflex
-                    let newWord = parsed.render(style: diacriticStyle)
+            if baseLower == "a" || baseLower == "e" || baseLower == "o" {
+                if v.shape == .circumflex && isAutoUndoEnabled {
+                    // Undo: â + a -> aa, ê + e -> ee, ô + o -> oo
+                    parsed.vowels[targetIdx].shape = .plain
+                    let newWord = parsed.render(style: diacriticStyle) + String(char)
                     return EngineAction(deleteCount: word.count, textToInsert: newWord)
                 }
+
+                parsed.vowels[targetIdx].shape = .circumflex
+                let newWord = parsed.render(style: diacriticStyle)
+                return EngineAction(deleteCount: word.count, textToInsert: newWord)
             }
         }
 

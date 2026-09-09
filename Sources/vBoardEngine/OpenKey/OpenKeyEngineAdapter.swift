@@ -87,12 +87,24 @@ public final class OpenKeyEngineAdapter: @unchecked Sendable {
 
         let hook = engine.hookState
         switch hook.code {
-        case .vWillProcess, .vRestore:
+        case .vWillProcess:
             let replacement = decodeCharData(
                 data: hook.charData,
                 count: Int(hook.newCharCount),
                 isReversed: true
             )
+            return EngineAction(
+                deleteCount: Int(hook.backspaceCount),
+                textToInsert: replacement
+            )
+
+        case .vRestore:
+            var replacement = decodeCharData(
+                data: hook.charData,
+                count: Int(hook.newCharCount),
+                isReversed: true
+            )
+            replacement.append(char)
             return EngineAction(
                 deleteCount: Int(hook.backspaceCount),
                 textToInsert: replacement

@@ -115,14 +115,14 @@
 		1F0EEA0DA51BBC012A6BB3D4 /* vBoardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vBoardApp.swift; sourceTree = "<group>"; };
 		2B63B77DF38A4AAC14BF9F64 /* TextToEmojiMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToEmojiMapper.swift; sourceTree = "<group>"; };
 		2EF39ADE5DA00FD393B077B1 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
-		2F0E28A44821EB97959A3EE7 /* vBoardKeyboardExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = vBoardKeyboardExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F0E28A44821EB97959A3EE7 /* vBoardKeyboardExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = vBoardKeyboardExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		39F17D01C62AC57E04050CEF /* libvBoardEngine.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libvBoardEngine.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		4025DAE455D113A6349D31DD /* WordTrie.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordTrie.swift; sourceTree = "<group>"; };
 		48F3D4C468849C38893BD996 /* SuggestionBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionBarView.swift; sourceTree = "<group>"; };
 		4E35DB124F67B039EA90E254 /* InputMethod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputMethod.swift; sourceTree = "<group>"; };
 		54031EA090E06FCC2065AE18 /* vietnamese_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = vietnamese_words.txt; sourceTree = "<group>"; };
 		55EFD98CBE74CD44A5AE5BD1 /* GlideTrailLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlideTrailLayer.swift; sourceTree = "<group>"; };
-		60FF81AF3E7506B63D00934D /* vBoard.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = vBoard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		60FF81AF3E7506B63D00934D /* vBoard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = vBoard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		61DDDE42F4CBB3888296C9DF /* ClipboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardView.swift; sourceTree = "<group>"; };
 		7A65F844DBB38E9421012DAA /* vBoardSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vBoardSettings.swift; sourceTree = "<group>"; };
 		8763C9EFAAC9C25762E94D1D /* KeyCalloutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCalloutView.swift; sourceTree = "<group>"; };
@@ -442,7 +442,6 @@
 						ProvisioningStyle = Automatic;
 					};
 					8C68F72DC46A93D1AEFD63F0 = {
-						DevelopmentTeam = PN375SGU3G;
 						ProvisioningStyle = Automatic;
 					};
 					9684846EA284F6D7425AD2A2 = {
@@ -450,7 +449,6 @@
 						ProvisioningStyle = Automatic;
 					};
 					F21A2F492BD15F2FD6D914A1 = {
-						DevelopmentTeam = PN375SGU3G;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -787,6 +785,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = HostApp/vBoard.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 98V2LUGJ92;
 				INFOPLIST_KEY_CFBundleDisplayName = vBoard;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -810,6 +809,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = HostApp/vBoard.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 98V2LUGJ92;
 				INFOPLIST_KEY_CFBundleDisplayName = vBoard;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -859,6 +859,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = KeyboardExtension/vBoardKeyboardExtension.entitlements;
+				DEVELOPMENT_TEAM = 98V2LUGJ92;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = KeyboardExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = vBoard;
@@ -882,6 +883,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = KeyboardExtension/vBoardKeyboardExtension.entitlements;
+				DEVELOPMENT_TEAM = 98V2LUGJ92;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = KeyboardExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = vBoard;
