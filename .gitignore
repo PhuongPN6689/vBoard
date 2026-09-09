@@ -1,0 +1,72 @@
+# ==========================================
+# macOS System Files
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# ==========================================
+# Xcode & Apple Build Artifacts
+# ==========================================
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.moved-aside
+*.xccheckout
+*.xcbkptlist
+*.xcuserstate
+*.xcscmblueprint
+
+# Xcode Workspace
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Code Coverage & Profiling
+*.gcda
+*.gcno
+*.gcov
+profile
+*.profdata
+*.proftext
+
+# ==========================================
+# Swift Package Manager (SPM)
+# ==========================================
+.build/
+.swiftpm/
+Package.resolved
+
+# ==========================================
+# App Code Signing / Local Certificates
+# ==========================================
+*.cer
+*.cert
+*.p12
+*.pfx
+*.pem
+*.mobileprovision
+*.provisionprofile
+
+# ==========================================
+# Temporary & Log Files
+# ==========================================
+*.log
+*.tmp
+*.bak
+*~
+
+
+docs/images

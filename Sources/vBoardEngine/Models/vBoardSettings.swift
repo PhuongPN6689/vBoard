@@ -1,0 +1,482 @@
+import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
+#if canImport(CoreFoundation)
+import CoreFoundation
+#endif
+
+/// Các mức kích thước chiều cao của bàn phím
+public enum KeyboardHeightScale: String, CaseIterable, Identifiable, Sendable {
+    case verySmall = "verySmall"
+    case small = "small"
+    case medium = "medium"
+    case large = "large"
+    case veryLarge = "veryLarge"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .verySmall: return "Rất nhỏ (85%)"
+        case .small: return "Nhỏ (92%)"
+        case .medium: return "Trung bình (100% - Mặc định)"
+        case .large: return "Lớn (108%)"
+        case .veryLarge: return "Rất lớn (115%)"
+        }
+    }
+
+    public var phoneHeight: CGFloat {
+        switch self {
+        case .verySmall: return 205.0
+        case .small: return 218.0
+        case .medium: return 230.0
+        case .large: return 246.0
+        case .veryLarge: return 262.0
+        }
+    }
+
+    public var padHeight: CGFloat {
+        switch self {
+        case .verySmall: return 240.0
+        case .small: return 260.0
+        case .medium: return 280.0
+        case .large: return 305.0
+        case .veryLarge: return 330.0
+        }
+    }
+}
+
+/// Tùy chọn chèn phím Tab trong Dev Mode
+public enum DevTabBehavior: String, CaseIterable, Identifiable, Sendable {
+    case fourSpaces = "fourSpaces"
+    case twoSpaces = "twoSpaces"
+    case tabChar = "tabChar"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .fourSpaces: return "4 Khoảng trắng"
+        case .twoSpaces: return "2 Khoảng trắng"
+        case .tabChar: return "Ký tự Tab (\\t)"
+        }
+    }
+
+    public var insertString: String {
+        switch self {
+        case .fourSpaces: return "    "
+        case .twoSpaces: return "  "
+        case .tabChar: return "\t"
+        }
+    }
+}
+
+/// Cường độ rung Taptic Engine
+public enum HapticIntensity: String, CaseIterable, Identifiable, Sendable {
+    case light = "light"
+    case medium = "medium"
+    case heavy = "heavy"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .light: return "Nhẹ"
+        case .medium: return "Vừa"
+        case .heavy: return "Mạnh"
+        }
+    }
+}
+
+/// Chế độ giao diện (Themes)
+public enum ThemeMode: String, CaseIterable, Identifiable, Sendable {
+    case system = "system"
+    case light = "light"
+    case dark = "dark"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .system: return "Tự động theo hệ thống"
+        case .light: return "Luôn luôn Sáng (Light)"
+        case .dark: return "Luôn luôn Tối (Dark)"
+        }
+    }
+}
+
+/// Quản lý cấu hình toàn cục cho bàn phím vBoard (dùng chung cho Host App và Keyboard Extension)
+public final class vBoardSettings: @unchecked Sendable {
+    public static let shared = vBoardSettings()
+
+    public static let appGroupSuiteName = "group.com.nguyenphuong.vBoard"
+    public static let settingsChangedNotification = "com.nguyenphuong.vBoard.settingsChanged"
+
+    private var defaults: UserDefaults {
+        return UserDefaults(suiteName: vBoardSettings.appGroupSuiteName) ?? UserDefaults.standard
+    }
+
+    private init() {}
+
+    /// Phát thông báo Darwin IPC để đồng bộ tức thì (< 0.1ms) sang Keyboard Extension
+    public func notifySettingsChanged() {
+        #if canImport(CoreFoundation)
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        CFNotificationCenterPostNotification(
+            center,
+            CFNotificationName(Self.settingsChangedNotification as CFString),
+            nil,
+            nil,
+            true
+        )
+        #endif
+    }
+
+    // MARK: - Keys
+    private enum Keys {
+        static let inputMethod = "vboard_input_method"
+        static let diacriticStyle = "vboard_diacritic_style"
+        static let isQuickTelexEnabled = "vboard_quick_telex"
+        static let isBracketShortcutsEnabled = "vboard_bracket_shortcuts"
+        static let isZKeyRemoveToneEnabled = "vboard_z_remove_tone"
+        static let isWAtWordBeginningEnabled = "vboard_w_beginning"
+        static let isModernToneBalancingEnabled = "vboard_tone_balancing"
+        static let isAutoUndoEnabled = "vboard_auto_undo"
+
+        static let keyboardHeightScale = "vboard_height_scale"
+        static let isGlobeKeyHidden = "vboard_hide_globe_key"
+        static let isNumberRowEnabled = "vboard_number_row"
+        static let isHintSymbolsEnabled = "vboard_hint_symbols"
+
+        static let isDeveloperModeButtonEnabled = "vboard_dev_button_enabled"
+        static let developerTabBehavior = "vboard_dev_tab_behavior"
+        static let isPairAutoCompleteEnabled = "vboard_pair_autocomplete"
+
+        static let isHapticEnabled = "vboard_haptic_feedback"
+        static let hapticIntensity = "vboard_haptic_intensity"
+        static let isKeyPreviewEnabled = "vboard_key_preview"
+        static let isSpaceDoubleTapPeriodEnabled = "vboard_space_double_tap"
+        static let isSpaceCursorGlideEnabled = "vboard_space_cursor_glide"
+        static let isSwipeDeleteEnabled = "vboard_swipe_delete"
+        static let isContinuousDeleteEnabled = "vboard_continuous_delete"
+        static let isAutoNumberPadEnabled = "vboard_auto_number_pad"
+        static let longPressDelayMs = "vboard_long_press_delay_ms"
+
+        static let themeMode = "vboard_theme_mode"
+        static let accentColorHex = "vboard_accent_color_hex"
+
+        static let isSuggestionBarEnabled = "vboard_suggestion_bar"
+        static let isClipboardEnabled = "vboard_clipboard_enabled"
+        static let isGlideTypingEnabled = "vboard_glide_typing"
+    }
+
+    // MARK: - Properties: OpenKey Core Settings
+
+    public var inputMethod: InputMethod {
+        get {
+            let raw = defaults.string(forKey: Keys.inputMethod) ?? "telex"
+            switch raw {
+            case "vni": return .vni
+            case "simpleTelex": return .simpleTelex
+            default: return .telex
+            }
+        }
+        set {
+            defaults.set(newValue == .vni ? "vni" : (newValue == .simpleTelex ? "simpleTelex" : "telex"), forKey: Keys.inputMethod)
+        }
+    }
+
+    public var diacriticStyle: DiacriticStyle {
+        get {
+            let raw = defaults.string(forKey: Keys.diacriticStyle) ?? "newStyle"
+            return raw == "oldStyle" ? .oldStyle : .newStyle
+        }
+        set {
+            defaults.set(newValue == .oldStyle ? "oldStyle" : "newStyle", forKey: Keys.diacriticStyle)
+        }
+    }
+
+    public var isQuickTelexEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isQuickTelexEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isQuickTelexEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isQuickTelexEnabled)
+        }
+    }
+
+    public var isBracketShortcutsEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isBracketShortcutsEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isBracketShortcutsEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isBracketShortcutsEnabled)
+        }
+    }
+
+    public var isZKeyRemoveToneEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isZKeyRemoveToneEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isZKeyRemoveToneEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isZKeyRemoveToneEnabled)
+        }
+    }
+
+    public var isWAtWordBeginningEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isWAtWordBeginningEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isWAtWordBeginningEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isWAtWordBeginningEnabled)
+        }
+    }
+
+    public var isModernToneBalancingEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isModernToneBalancingEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isModernToneBalancingEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isModernToneBalancingEnabled)
+        }
+    }
+
+    public var isAutoUndoEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isAutoUndoEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isAutoUndoEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isAutoUndoEnabled)
+        }
+    }
+
+    // MARK: - Properties: Bố cục & Kích thước bàn phím
+
+    public var keyboardHeightScale: KeyboardHeightScale {
+        get {
+            let raw = defaults.string(forKey: Keys.keyboardHeightScale) ?? "medium"
+            return KeyboardHeightScale(rawValue: raw) ?? .medium
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.keyboardHeightScale)
+        }
+    }
+
+    /// Ẩn hoàn toàn phím quả cầu để mở rộng tối đa phím Spacebar (mặc định: bật ẩn)
+    public var isGlobeKeyHidden: Bool {
+        get {
+            if defaults.object(forKey: Keys.isGlobeKeyHidden) == nil { return true }
+            return defaults.bool(forKey: Keys.isGlobeKeyHidden)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isGlobeKeyHidden)
+        }
+    }
+
+    /// Hiển thị hàng phím số chuyên dụng ở trên cùng
+    public var isNumberRowEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isNumberRowEnabled) == nil { return false }
+            return defaults.bool(forKey: Keys.isNumberRowEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isNumberRowEnabled)
+        }
+    }
+
+    /// Hiển thị ký tự phụ nhỏ ở góc trên bên phải các phím chữ
+    public var isHintSymbolsEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isHintSymbolsEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isHintSymbolsEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isHintSymbolsEnabled)
+        }
+    }
+
+    // MARK: - Properties: Developer Mode
+
+    public var isDeveloperModeButtonEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isDeveloperModeButtonEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isDeveloperModeButtonEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isDeveloperModeButtonEnabled)
+        }
+    }
+
+    public var developerTabBehavior: DevTabBehavior {
+        get {
+            let raw = defaults.string(forKey: Keys.developerTabBehavior) ?? "fourSpaces"
+            return DevTabBehavior(rawValue: raw) ?? .fourSpaces
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.developerTabBehavior)
+        }
+    }
+
+    public var isPairAutoCompleteEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isPairAutoCompleteEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isPairAutoCompleteEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isPairAutoCompleteEnabled)
+        }
+    }
+
+    // MARK: - Properties: Cử chỉ & Phản hồi
+
+    public var isHapticEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isHapticEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isHapticEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isHapticEnabled)
+        }
+    }
+
+    public var hapticIntensity: HapticIntensity {
+        get {
+            let raw = defaults.string(forKey: Keys.hapticIntensity) ?? "light"
+            return HapticIntensity(rawValue: raw) ?? .light
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.hapticIntensity)
+        }
+    }
+
+    public var isKeyPreviewEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isKeyPreviewEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isKeyPreviewEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isKeyPreviewEnabled)
+        }
+    }
+
+    public var isSpaceDoubleTapPeriodEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isSpaceDoubleTapPeriodEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isSpaceDoubleTapPeriodEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isSpaceDoubleTapPeriodEnabled)
+        }
+    }
+
+    public var isSpaceCursorGlideEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isSpaceCursorGlideEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isSpaceCursorGlideEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isSpaceCursorGlideEnabled)
+        }
+    }
+
+    public var isSwipeDeleteEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isSwipeDeleteEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isSwipeDeleteEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isSwipeDeleteEnabled)
+        }
+    }
+
+    public var isContinuousDeleteEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isContinuousDeleteEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isContinuousDeleteEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isContinuousDeleteEnabled)
+        }
+    }
+
+    public var isAutoNumberPadEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isAutoNumberPadEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isAutoNumberPadEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isAutoNumberPadEnabled)
+        }
+    }
+
+    /// Độ trễ nhấn giữ (mili-giây, mặc định 250ms chuẩn Gboard)
+    public var longPressDelayMs: Int {
+        get {
+            let val = defaults.integer(forKey: Keys.longPressDelayMs)
+            return val == 0 ? 250 : val
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.longPressDelayMs)
+        }
+    }
+
+    // MARK: - Properties: Giao diện & Chủ đề Màu sắc
+
+    public var themeMode: ThemeMode {
+        get {
+            let raw = defaults.string(forKey: Keys.themeMode) ?? "system"
+            return ThemeMode(rawValue: raw) ?? .system
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.themeMode)
+        }
+    }
+
+    public var accentColorHex: String {
+        get {
+            return defaults.string(forKey: Keys.accentColorHex) ?? "#1a73e8"
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.accentColorHex)
+        }
+    }
+
+    // MARK: - Properties: Gợi ý từ, Bảng tạm & Gõ lướt
+
+    public var isSuggestionBarEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isSuggestionBarEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isSuggestionBarEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isSuggestionBarEnabled)
+        }
+    }
+
+    public var isClipboardEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isClipboardEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isClipboardEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isClipboardEnabled)
+        }
+    }
+
+    public var isGlideTypingEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isGlideTypingEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isGlideTypingEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isGlideTypingEnabled)
+        }
+    }
+}

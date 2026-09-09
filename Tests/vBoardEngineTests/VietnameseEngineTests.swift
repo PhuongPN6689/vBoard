@@ -1,0 +1,404 @@
+import Testing
+import Foundation
+@testable import vBoardEngine
+
+/// Giả lập UITextDocumentProxy để kiểm tra chu trình gõ thực tế
+final class MockTextDocumentProxy: TextDocumentProxyProtocol, @unchecked Sendable {
+    var buffer: String = ""
+    var cursorPosition: Int = 0
+
+    var documentContextBeforeInput: String? {
+        if cursorPosition <= 0 { return "" }
+        let index = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
+        return String(buffer[..<index])
+    }
+
+    var documentContextAfterInput: String? {
+        if cursorPosition >= buffer.count { return "" }
+        let index = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
+        return String(buffer[index...])
+    }
+
+    func deleteBackward() {
+        guard cursorPosition > 0 else { return }
+        let removeIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition - 1)
+        buffer.remove(at: removeIndex)
+        cursorPosition -= 1
+    }
+
+    func insertText(_ text: String) {
+        let insertIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
+        buffer.insert(contentsOf: text, at: insertIndex)
+        cursorPosition += text.count
+    }
+
+    func adjustTextPosition(byCharacterOffset offset: Int) {
+        cursorPosition = max(0, min(buffer.count, cursorPosition + offset))
+    }
+
+    /// Tiện ích gõ một chuỗi liên tiếp
+    func typeSequence(_ sequence: String, adapter: TextProxyAdapter) {
+        for char in sequence {
+            if char == " " {
+                adapter.handleSpace(proxy: self)
+            } else {
+                adapter.handleKeyInput(char, proxy: self)
+            }
+        }
+    }
+}
+
+@Suite("Bộ kiểm thử Lõi gõ tiếng Việt vBoardEngine")
+@MainActor
+struct VietnameseEngineTests {
+
+    @Test("Kiểm tra dấu thanh cơ bản (Telex)")
+    func testBasicTonesTelex() {
+        let adapter = TextProxyAdapter()
+
+        let testCases: [(input: String, expected: String)] = [
+            ("as", "á"),
+            ("af", "à"),
+            ("ar", "ả"),
+            ("ax", "ã"),
+            ("aj", "ạ"),
+            ("tos", "tó"),
+            ("toof", "tồ"),
+            ("mej", "mẹ")
+        ]
+
+        for (input, expected) in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(input, adapter: adapter)
+            #expect(proxy.buffer == expected, "Gõ \(input) phải ra \(expected), thực tế: \(proxy.buffer)")
+        }
+    }
+
+    @Test("Kiểm tra biến đổi nguyên âm mũ và móc (Telex)")
+    func testVowelModificationsTelex() {
+        let adapter = TextProxyAdapter()
+
+        let testCases: [(input: String, expected: String)] = [
+            ("aa", "â"),
+            ("ee", "ê"),
+            ("oo", "ô"),
+            ("aw", "ă"),
+            ("ow", "ơ"),
+            ("uw", "ư"),
+            ("uow", "ươ"),
+            ("dd", "đ"),
+            ("w", "ư"),
+            ("DD", "Đ")
+        ]
+
+        for (input, expected) in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(input, adapter: adapter)
+            #expect(proxy.buffer == expected, "Gõ \(input) phải ra \(expected), thực tế: \(proxy.buffer)")
+        }
+    }
+
+    @Test("Kiểm tra vị trí đặt dấu thanh chuẩn mới (hoa/thuy/toan/tien)")
+    func testTonePlacementNewStyle() {
+        let adapter = TextProxyAdapter()
+
+        let testCases: [(input: String, expected: String)] = [
+            ("hoaf", "hòa"),
+            ("thuyr", "thủy"),
+            ("toasn", "toán"),
+            ("tieens", "tiến"),
+            ("muoons", "muốn"),
+            ("muoowns", "mướn"),
+            ("nguowif", "người"),
+            ("ddasnh", "đánh"),
+            ("quas", "quá"),
+            ("quans", "quán"),
+            ("gias", "giá"),
+            ("gios", "gió"),
+            ("ginf", "gìn"),
+            ("chuyeens", "chuyến"),
+            ("chuyeenr", "chuyển"),
+            ("chuyeenf", "chuyền"),
+            ("chuyeenx", "chuyễn"),
+            ("chuyeenj", "chuyện"),
+            ("thuyeenf", "thuyền"),
+            ("khuyeen", "khuyên"),
+            ("duyeetj", "duyệt"),
+            ("khuyeets", "khuyết"),
+            ("khuyur", "khuỷu"),
+            ("quyeenr", "quyển")
+        ]
+
+        for (input, expected) in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(input, adapter: adapter)
+            #expect(proxy.buffer == expected, "Gõ \(input) phải ra \(expected), thực tế: \(proxy.buffer)")
+        }
+    }
+
+    @Test("Kiểm tra xử lý văn bản ngữ cảnh chứa Unicode NFD (Decomposed)")
+    func testNFDContextHandling() {
+        let adapter = TextProxyAdapter()
+        let proxy = MockTextDocumentProxy()
+
+        // Giả lập ngữ cảnh trước con trỏ là dạng NFD: 'e' + combining circumflex (\u{0302})
+        let nfdWord = "chuy" + "e\u{0302}n"
+        proxy.buffer = nfdWord
+        proxy.cursorPosition = nfdWord.count
+
+        // Gõ thêm 'r' để bỏ dấu hỏi
+        adapter.handleKeyInput("r", proxy: proxy)
+        #expect(proxy.buffer == "chuyển", "Từ NFD \(nfdWord) gõ r phải ra chuyển, thực tế: \(proxy.buffer)")
+    }
+
+    @Test("Kiểm tra cơ chế hoàn tác khi nhấn đúp phím dấu (Undo)")
+    func testUndoMechanism() {
+        let adapter = TextProxyAdapter()
+
+        let testCases: [(input: String, expected: String)] = [
+            ("ass", "as"),
+            ("aaa", "aa"),
+            ("ddd", "dd"),
+            ("aww", "aw"),
+            ("oww", "ow"),
+            ("uww", "uw")
+        ]
+
+        for (input, expected) in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(input, adapter: adapter)
+            #expect(proxy.buffer == expected, "Gõ \(input) phải ra \(expected), thực tế: \(proxy.buffer)")
+        }
+    }
+
+    @Test("Kiểm tra gõ câu hoàn chỉnh có dấu cách")
+    func testFullSentenceTyping() {
+        let adapter = TextProxyAdapter()
+        let proxy = MockTextDocumentProxy()
+
+        proxy.typeSequence("vieetj nam ddaats nuowsc quee huowng tooi", adapter: adapter)
+        #expect(proxy.buffer == "việt nam đất nước quê hương tôi")
+    }
+
+    @Test("Kiểm tra tính năng đặc trưng của OpenKey (phím z gỡ dấu, quick telex, phím ngoặc)")
+    func testOpenKeySpecificFeatures() {
+        let adapter = TextProxyAdapter()
+
+        let testCases: [(input: String, expected: String)] = [
+            ("toansz", "toan"),
+            ("tieengsz", "tiêng"),
+            ("chuwaxz", "chưa"),
+            ("cc", "ch"),
+            ("gg", "gi"),
+            ("kk", "kh"),
+            ("nn", "ng"),
+            ("qq", "qu"),
+            ("pp", "ph"),
+            ("tt", "th"),
+            ("[", "ơ"),
+            ("]", "ư"),
+            ("ww", "w")
+        ]
+
+        for (input, expected) in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(input, adapter: adapter)
+            #expect(proxy.buffer == expected, "Gõ \(input) phải ra \(expected), thực tế: \(proxy.buffer)")
+        }
+    }
+
+    @Test("Kiểm tra cử chỉ di chuyển con trỏ phím Space")
+    func testSpaceCursorMovement() {
+        let adapter = TextProxyAdapter()
+        let proxy = MockTextDocumentProxy()
+
+        proxy.typeSequence("xin chao", adapter: adapter)
+        #expect(proxy.cursorPosition == 8)
+
+        // Di chuyển con trỏ lùi lại 4 vị trí
+        adapter.moveCursor(by: -4, proxy: proxy)
+        #expect(proxy.cursorPosition == 4)
+
+        // Chèn thêm ký tự ngay tại vị trí mới
+        proxy.insertText("-")
+        #expect(proxy.buffer == "xin -chao")
+    }
+
+    @Test("Kiểm tra bật/tắt các tuỳ chọn cấu hình OpenKey")
+    func testOpenKeyConfigurationToggles() {
+        let engine = VietnameseEngine()
+        let adapter = TextProxyAdapter(engine: engine)
+
+        // 1. Tắt Quick Telex
+        engine.isQuickTelexEnabled = false
+        let proxy1 = MockTextDocumentProxy()
+        proxy1.typeSequence("cc", adapter: adapter)
+        #expect(proxy1.buffer == "cc")
+
+        // 2. Bật lại Quick Telex
+        engine.isQuickTelexEnabled = true
+        let proxy2 = MockTextDocumentProxy()
+        proxy2.typeSequence("cc", adapter: adapter)
+        #expect(proxy2.buffer == "ch")
+
+        // 3. Tắt phím z gỡ dấu
+        engine.isZKeyRemoveToneEnabled = false
+        let proxy3 = MockTextDocumentProxy()
+        proxy3.typeSequence("toansz", adapter: adapter)
+        #expect(proxy3.buffer == "toánz")
+
+        // 4. Bật lại phím z gỡ dấu
+        engine.isZKeyRemoveToneEnabled = true
+        let proxy4 = MockTextDocumentProxy()
+        proxy4.typeSequence("toansz", adapter: adapter)
+        #expect(proxy4.buffer == "toan")
+
+        // 5. Tắt phím ngoặc vuông [ ]
+        engine.isBracketShortcutsEnabled = false
+        let proxy5 = MockTextDocumentProxy()
+        proxy5.typeSequence("[", adapter: adapter)
+        #expect(proxy5.buffer == "[")
+
+        // 6. Bật lại phím ngoặc vuông
+        engine.isBracketShortcutsEnabled = true
+        let proxy6 = MockTextDocumentProxy()
+        proxy6.typeSequence("[", adapter: adapter)
+        #expect(proxy6.buffer == "ơ")
+
+        // 7. Tắt gõ w đầu từ thành ư
+        engine.isWAtWordBeginningEnabled = false
+        let proxy7 = MockTextDocumentProxy()
+        proxy7.typeSequence("w", adapter: adapter)
+        #expect(proxy7.buffer == "w")
+    }
+
+    @Test("Kiểm tra gợi ý từ thông minh và so khớp cử chỉ vuốt phím (Glide)")
+    func testWordTrieSuggestionsAndGlide() {
+        let trie = WordTrie.shared
+
+        // Gợi ý theo tiền tố
+        let suggestionsVi = trie.suggest(prefix: "vi", limit: 3)
+        #expect(!suggestionsVi.isEmpty)
+        #expect(suggestionsVi.contains { $0.lowercased().hasPrefix("vi") })
+
+        let suggestionsCh = trie.suggest(prefix: "ch", limit: 3)
+        #expect(!suggestionsCh.isEmpty)
+
+        // Kiểm tra nạp từ file từ điển
+        #expect(trie.totalWordsCount >= 800, "Tổng số từ nạp từ file từ điển phải >= 800 từ (thực tế: \(trie.totalWordsCount))")
+
+        // Gợi ý theo cử chỉ vuốt phím (Glide)
+        let glideXin = trie.matchGlide(keySequence: ["x", "i", "n"], limit: 3)
+        #expect(glideXin.contains("xin"))
+
+        // Kiểm tra vuốt từ có dấu tiếng Việt trên bàn phím QWERTY (không dấu)
+        let glideChao = trie.matchGlide(keySequence: ["c", "h", "a", "o"], limit: 3)
+        #expect(glideChao.contains("chào"))
+
+        let glideDuoc = trie.matchGlide(keySequence: ["d", "u", "o", "c"], limit: 3)
+        #expect(glideDuoc.contains("được"))
+
+        let glideBan = trie.matchGlide(keySequence: ["b", "a", "n"], limit: 3)
+        #expect(glideBan.contains("bạn"))
+
+        let glideKhong = trie.matchGlide(keySequence: ["k", "h", "o", "n", "g"], limit: 3)
+        #expect(glideKhong.contains("không"))
+
+        // Kiểm tra vuốt thực tế có đi qua các phím trung gian dọc đường vuốt
+        let trajectoryChao = trie.matchGlide(keySequence: ["c", "v", "g", "h", "j", "a", "s", "o"], limit: 3)
+        #expect(trajectoryChao.contains("chào"))
+
+        // Đo hiệu năng tra cứu gợi ý từ (< 0.01ms)
+        let iterations = 10_000
+        let startTime = CFAbsoluteTimeGetCurrent()
+        for i in 0..<iterations {
+            let prefix = (i % 2 == 0) ? "vi" : "ch"
+            _ = trie.suggest(prefix: prefix, limit: 3)
+        }
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        let timePerQueryMs = (elapsed / Double(iterations)) * 1000.0
+        print("\n⚡️ TỐC ĐỘ GỢI Ý TỪ: \(String(format: "%.5f", timePerQueryMs)) ms / lần tra cứu (\(iterations) lần)")
+        #expect(timePerQueryMs < 0.05)
+    }
+
+    @Test("Kiểm tra quản lý lịch sử Bảng tạm (ClipboardManager)")
+    func testClipboardManager() {
+        let clipboard = ClipboardManager.shared
+        clipboard.clearHistory()
+        #expect(clipboard.getHistory().isEmpty)
+
+        clipboard.addClip("Đoạn văn bản 1")
+        clipboard.addClip("Đoạn văn bản 2")
+        let history = clipboard.getHistory()
+        #expect(history.count == 2)
+        #expect(history[0] == "Đoạn văn bản 2")
+
+        clipboard.clearHistory()
+        #expect(clipboard.getHistory().isEmpty)
+    }
+
+    @Test("Đo lường hiệu năng xử lý ký tự (< 0.05ms mỗi lần gõ)")
+    func testPerformanceKeystrokeLatency() {
+        let engine = VietnameseEngine()
+        let sampleContexts = ["", "t", "to", "tô", "viet", "nguo", "truong"]
+        let chars: [Character] = ["s", "f", "r", "x", "j", "a", "w", "e", "o", "n", "h", "c"]
+
+        let iterations = 20_000
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        for i in 0..<iterations {
+            let ctx = sampleContexts[i % sampleContexts.count]
+            let ch = chars[i % chars.count]
+            _ = engine.processKeystroke(ch, contextBefore: ctx)
+        }
+
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        let timePerKeystrokeMs = (elapsed / Double(iterations)) * 1000.0
+
+        print("\n⚡️ TỐC ĐỘ XỬ LÝ: \(String(format: "%.4f", timePerKeystrokeMs)) ms / ký tự (\(iterations) lần gõ)")
+        #expect(timePerKeystrokeMs < 0.05, "Thời gian xử lý mỗi ký tự phải dưới 0.05ms (50 microsecond)")
+    }
+
+    @Test("Kiểm tra toàn diện cấu hình vBoardSettings và Darwin IPC Notification")
+    func testNewVBoardSettingsAndDarwinNotification() {
+        let settings = vBoardSettings.shared
+
+        // Test giá trị mặc định theo SETTINGS_DESIGN.md
+        #expect(settings.isHintSymbolsEnabled == true)
+        #expect(settings.isDeveloperModeButtonEnabled == true)
+        #expect(settings.developerTabBehavior == .fourSpaces)
+        #expect(settings.developerTabBehavior.insertString == "    ")
+        #expect(settings.isPairAutoCompleteEnabled == true)
+        #expect(settings.hapticIntensity == .light)
+        #expect(settings.longPressDelayMs == 250)
+        #expect(settings.themeMode == .system)
+        #expect(settings.accentColorHex == "#1a73e8")
+
+        // Test thay đổi cấu hình
+        settings.developerTabBehavior = .twoSpaces
+        #expect(settings.developerTabBehavior.insertString == "  ")
+        settings.developerTabBehavior = .tabChar
+        #expect(settings.developerTabBehavior.insertString == "\t")
+        settings.developerTabBehavior = .fourSpaces
+
+        settings.hapticIntensity = .heavy
+        #expect(settings.hapticIntensity == .heavy)
+        settings.hapticIntensity = .light
+
+        settings.longPressDelayMs = 200
+        #expect(settings.longPressDelayMs == 200)
+        settings.longPressDelayMs = 250
+
+        settings.themeMode = .dark
+        #expect(settings.themeMode == .dark)
+        settings.themeMode = .system
+
+        settings.accentColorHex = "#22D3EE"
+        #expect(settings.accentColorHex == "#22D3EE")
+        settings.accentColorHex = "#1a73e8"
+
+        // Test Darwin IPC notification trigger
+        #expect(vBoardSettings.settingsChangedNotification == "com.nguyenphuong.vBoard.settingsChanged")
+        settings.notifySettingsChanged() // Đảm bảo không crash
+    }
+}

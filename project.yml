@@ -1,0 +1,82 @@
+name: vBoard
+options:
+  bundleIdPrefix: com.phuong
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    DEVELOPMENT_TEAM: "PN375SGU3G"
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0"
+
+targets:
+  vBoardEngine:
+    type: library.static
+    platform: iOS
+    sources:
+      - path: Sources/vBoardEngine
+
+  vBoardKeyboard:
+    type: library.static
+    platform: iOS
+    sources:
+      - path: Sources/vBoardKeyboard
+    dependencies:
+      - target: vBoardEngine
+
+  vBoard:
+    type: application
+    platform: iOS
+    sources:
+      - path: HostApp
+    dependencies:
+      - target: vBoardKeyboardExtension
+      - target: vBoardKeyboard
+      - target: vBoardEngine
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nguyenphuong.vBoard
+        INFOPLIST_KEY_CFBundleDisplayName: "vBoard"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        CODE_SIGN_ENTITLEMENTS: HostApp/vBoard.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    scheme:
+      gatherCoverageData: false
+
+  vBoardKeyboardExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: KeyboardExtension
+    dependencies:
+      - target: vBoardKeyboard
+      - target: vBoardEngine
+    info:
+      path: KeyboardExtension/Info.plist
+      properties:
+        CFBundleDisplayName: "vBoard"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardExtensionViewController
+          NSExtensionAttributes:
+            IsASCIICapable: true
+            PrefersRightToLeft: false
+            PrimaryLanguage: vi-VN
+            RequestsOpenAccess: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nguyenphuong.vBoard.KeyboardExtension
+        INFOPLIST_KEY_CFBundleDisplayName: "vBoard"
+        CODE_SIGN_ENTITLEMENTS: KeyboardExtension/vBoardKeyboardExtension.entitlements
+        SKIP_INSTALL: NO
+        GENERATE_INFOPLIST_FILE: NO

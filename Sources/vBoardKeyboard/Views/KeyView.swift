@@ -1,0 +1,452 @@
+#if canImport(UIKit)
+import UIKit
+import vBoardEngine
+
+@MainActor
+public protocol KeyViewDelegate: AnyObject {
+    func keyViewDidTap(_ keyView: KeyView)
+    func keyViewDidLongPress(_ keyView: KeyView)
+    func keyView(_ keyView: KeyView, didRequestCalloutFor key: KeyboardKey)
+    func keyView(_ keyView: KeyView, didUpdateCalloutTouch point: CGPoint)
+    func keyViewDidEndCallout(_ keyView: KeyView) -> String?
+    func keyViewDidCancelCallout(_ keyView: KeyView)
+}
+
+@MainActor
+public final class KeyView: UIControl {
+    public let key: KeyboardKey
+    public weak var delegate: KeyViewDelegate?
+
+    private let label = UILabel()
+    private let secondaryLabel = UILabel()
+    private let iconImageView = UIImageView()
+    private var longPressTimer: Timer?
+    private var isLongPressedTriggered = false
+    private var isCalloutActive = false
+    private var initialTouchPoint: CGPoint = .zero
+    private var hasMovedBeyondTapThreshold = false
+
+    public init(key: KeyboardKey) {
+        self.key = key
+        super.init(frame: .zero)
+        setupUI()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupUI() {
+        // Bo góc mềm mại chuẩn Gboard Material You
+        layer.cornerRadius = 8.0
+        layer.masksToBounds = false
+
+        // Đổ bóng thanh mảnh, tinh tế chuẩn Material You
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.15
+        layer.shadowOffset = CGSize(width: 0, height: 1.2)
+        layer.shadowRadius = 1.0
+
+        // Nhãn chính giữa phím
+        label.text = key.displayLabel
+        label.textAlignment = .center
+        label.isUserInteractionEnabled = false
+        label.font = fontForKey(key)
+        addSubview(label)
+
+        // Vector Icon (SF Symbols) cho các phím chức năng
+        iconImageView.contentMode = .scaleAspectFit
+        iconImageView.isUserInteractionEnabled = false
+        addSubview(iconImageView)
+
+        // Nhãn phụ (góc trên phải - ví dụ số 1..0 hoặc ký tự đặc biệt)
+        if let secondary = key.secondaryLabel, vBoardSettings.shared.isHintSymbolsEnabled {
+            secondaryLabel.text = secondary
+            secondaryLabel.textAlignment = .center
+            secondaryLabel.font = UIFont.systemFont(ofSize: 9.5, weight: .medium)
+            secondaryLabel.isUserInteractionEnabled = false
+            addSubview(secondaryLabel)
+        }
+
+        updateTheme()
+    }
+
+    private func fontForKey(_ key: KeyboardKey) -> UIFont {
+        switch key.type {
+        case .character:
+            return UIFont.systemFont(ofSize: 21.0, weight: .regular)
+        case .space:
+            return UIFont.systemFont(ofSize: 13.0, weight: .regular)
+        case .shift, .delete:
+            return UIFont.systemFont(ofSize: 17.0, weight: .medium)
+        case .modeSwitch:
+            return UIFont.systemFont(ofSize: 15.0, weight: .regular)
+        case .returnKey, .globe, .emoji, .dismiss:
+            return UIFont.systemFont(ofSize: 15.0, weight: .regular)
+        }
+    }
+
+    public override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        // Mở rộng vùng chạm cạnh viền (đặc biệt cho phím A ở mép trái và L ở mép phải)
+        let touchArea = bounds.insetBy(dx: -14.0, dy: -6.0)
+        return touchArea.contains(point)
+    }
+
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+        label.frame = bounds
+        
+        // Phím Return/Action bo viên thuốc chuẩn Gboard Material You
+        if case .returnKey = key.type {
+            layer.cornerRadius = bounds.height / 2.0
+        } else {
+            layer.cornerRadius = 8.0
+        }
+
+        let iconDim: CGFloat = 19.0
+        iconImageView.frame = CGRect(
+            x: round((bounds.width - iconDim) / 2.0),
+            y: round((bounds.height - iconDim) / 2.0),
+            width: iconDim,
+            height: iconDim
+        )
+
+        if secondaryLabel.superview != nil {
+            let secW: CGFloat = 13.0
+            let secH: CGFloat = 12.0
+            secondaryLabel.frame = CGRect(x: bounds.width - secW - 2.5, y: 2.5, width: secW, height: secH)
+        }
+    }
+
+    private func parseHexColor(_ hex: String) -> UIColor? {
+        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+        var rgb: UInt64 = 0
+        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else { return nil }
+        let r = CGFloat((rgb & 0xFF0000) >> 16) / 255.0
+        let g = CGFloat((rgb & 0x00FF00) >> 8) / 255.0
+        let b = CGFloat(rgb & 0x0000FF) / 255.0
+        return UIColor(red: r, green: g, blue: b, alpha: 1.0)
+    }
+
+    public func updateTheme() {
+        let settings = vBoardSettings.shared
+        let isDark: Bool
+        switch settings.themeMode {
+        case .light: isDark = false
+        case .dark: isDark = true
+        case .system: isDark = (traitCollection.userInterfaceStyle == .dark)
+        }
+
+        // Bảng màu chuẩn Gboard Material You
+        let darkCharBg = UIColor(red: 54/255, green: 56/255, blue: 61/255, alpha: 1.0) // #36383D
+        let darkSpecialBg = UIColor(red: 40/255, green: 41/255, blue: 45/255, alpha: 1.0) // #28292D
+        let darkText = UIColor.white
+        let darkSecondary = UIColor(red: 154/255, green: 160/255, blue: 166/255, alpha: 1.0) // #9AA0A6
+
+        let lightCharBg = UIColor.white // #FFFFFF
+        let lightSpecialBg = UIColor(red: 211/255, green: 227/255, blue: 253/255, alpha: 1.0) // #D3E3FD (Material You Soft Pastel Blue)
+        let lightText = UIColor(red: 31/255, green: 31/255, blue: 31/255, alpha: 1.0) // #1F1F1F
+        let lightSecondary = UIColor(red: 95/255, green: 99/255, blue: 104/255, alpha: 1.0) // #5F6368
+
+        secondaryLabel.textColor = isDark ? darkSecondary : lightSecondary
+        secondaryLabel.isHidden = !settings.isHintSymbolsEnabled
+
+        let isBottomPunctuation: Bool
+        if case .character(let s) = key.type, (s == "," || s == ".") {
+            isBottomPunctuation = true
+        } else {
+            isBottomPunctuation = false
+        }
+
+        switch key.type {
+        case .character:
+            if isBottomPunctuation {
+                backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
+                label.textColor = isDark ? darkText : lightText
+            } else {
+                backgroundColor = isDark ? darkCharBg : lightCharBg
+                label.textColor = isDark ? darkText : lightText
+            }
+            label.isHidden = false
+            iconImageView.isHidden = true
+
+        case .space:
+            backgroundColor = isDark ? darkCharBg : lightCharBg
+            label.textColor = isDark ? darkSecondary : lightSecondary
+            label.isHidden = false
+            iconImageView.isHidden = true
+
+        case .delete:
+            backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
+            label.isHidden = true
+            iconImageView.isHidden = false
+            let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
+            iconImageView.image = UIImage(systemName: "delete.backward", withConfiguration: config) ?? UIImage(systemName: "delete.left", withConfiguration: config)
+            iconImageView.tintColor = isDark ? darkText : lightText
+
+        case .shift:
+            backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
+            label.isHidden = true
+            iconImageView.isHidden = false
+            let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
+            if key.displayLabel == "⇪" {
+                iconImageView.image = UIImage(systemName: "capslock.fill", withConfiguration: config)
+            } else if key.displayLabel == "⬆" {
+                iconImageView.image = UIImage(systemName: "shift.fill", withConfiguration: config)
+            } else {
+                iconImageView.image = UIImage(systemName: "shift", withConfiguration: config)
+            }
+            iconImageView.tintColor = isDark ? darkText : lightText
+
+        case .globe:
+            backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
+            label.isHidden = true
+            iconImageView.isHidden = false
+            let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+            iconImageView.image = UIImage(systemName: "globe", withConfiguration: config)
+            iconImageView.tintColor = isDark ? darkText : lightText
+
+        case .emoji:
+            backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
+            label.isHidden = true
+            iconImageView.isHidden = false
+            let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+            iconImageView.image = UIImage(systemName: "face.smiling", withConfiguration: config)
+            iconImageView.tintColor = isDark ? darkText : lightText
+
+        case .dismiss:
+            backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
+            label.isHidden = true
+            iconImageView.isHidden = false
+            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+            iconImageView.image = UIImage(systemName: "keyboard.chevron.compact.down", withConfiguration: config) ?? UIImage(systemName: "chevron.down", withConfiguration: config)
+            iconImageView.tintColor = isDark ? darkText : lightText
+
+        case .modeSwitch:
+            backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
+            label.textColor = isDark ? darkText : lightText
+            label.isHidden = false
+            iconImageView.isHidden = true
+
+        case .returnKey:
+            let symbolConfig = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
+            label.isHidden = true
+            iconImageView.isHidden = false
+
+            let isSearch = (key.returnKeyType == .search)
+            let searchColor = UIColor(red: 80/255, green: 194/255, blue: 178/255, alpha: 1.0)
+            let defaultBlue = UIColor(red: 26/255, green: 115/255, blue: 232/255, alpha: 1.0)
+            let accent = parseHexColor(settings.accentColorHex) ?? defaultBlue
+
+            backgroundColor = isSearch ? searchColor : accent
+            iconImageView.tintColor = isSearch ? UIColor(red: 17/255, green: 17/255, blue: 17/255, alpha: 1.0) : UIColor.white
+
+            switch key.returnKeyType {
+            case .search:
+                iconImageView.image = UIImage(systemName: "magnifyingglass", withConfiguration: symbolConfig)
+            case .send:
+                iconImageView.image = UIImage(systemName: "paperplane.fill", withConfiguration: symbolConfig)
+            case .go, .next:
+                iconImageView.image = UIImage(systemName: "arrow.right", withConfiguration: symbolConfig)
+            default:
+                iconImageView.image = UIImage(systemName: "arrow.turn.down.left", withConfiguration: symbolConfig)
+            }
+        }
+    }
+
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        updateTheme()
+    }
+
+    // MARK: - Touch Tracking & Long Press
+
+    private var previewPopup: UIView?
+    private var repeatDeleteTimer: Timer?
+    private var didRepeatDelete = false
+
+    private func showPreviewPopup() {
+        guard case .character = key.type, vBoardSettings.shared.isKeyPreviewEnabled else { return }
+        hidePreviewPopup()
+
+        let isDark = traitCollection.userInterfaceStyle == .dark
+        let popup = UIView()
+        popup.backgroundColor = isDark ? UIColor(white: 0.28, alpha: 1.0) : UIColor.white
+        popup.layer.cornerRadius = 9.0
+        popup.layer.shadowColor = UIColor.black.cgColor
+        popup.layer.shadowOpacity = 0.35
+        popup.layer.shadowOffset = CGSize(width: 0, height: 2.0)
+        popup.layer.shadowRadius = 5.0
+        popup.isUserInteractionEnabled = false
+
+        let popupWidth = bounds.width * 1.35
+        let popupHeight: CGFloat = 56.0
+        popup.frame = CGRect(
+            x: (bounds.width - popupWidth) / 2.0,
+            y: -popupHeight + 8.0,
+            width: popupWidth,
+            height: popupHeight
+        )
+
+        let charLabel = UILabel(frame: CGRect(x: 0, y: 4, width: popupWidth, height: 38))
+        charLabel.text = key.displayLabel
+        charLabel.textAlignment = .center
+        charLabel.font = UIFont.systemFont(ofSize: 30.0, weight: .regular)
+        charLabel.textColor = isDark ? .white : .black
+        popup.addSubview(charLabel)
+
+        addSubview(popup)
+        self.previewPopup = popup
+    }
+
+    private func hidePreviewPopup() {
+        previewPopup?.removeFromSuperview()
+        previewPopup = nil
+    }
+
+    // MARK: - Nhấn giữ Backspace xóa liên tục (Repeat Delete)
+    private func startRepeatDeleteTimer() {
+        guard case .delete = key.type, vBoardSettings.shared.isContinuousDeleteEnabled else { return }
+        repeatDeleteTimer?.invalidate()
+        didRepeatDelete = false
+
+        // Đè giữ 0.35s thì bắt đầu vòng lặp xóa lùi liên tục
+        repeatDeleteTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self = self, self.isHighlighted else { return }
+                self.startContinuousDeleteCycle()
+            }
+        }
+    }
+
+    private func startContinuousDeleteCycle() {
+        repeatDeleteTimer?.invalidate()
+        // Mỗi 0.08s (80ms) xóa lùi 1 ký tự
+        repeatDeleteTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self = self, self.isHighlighted else {
+                    self?.stopRepeatDeleteTimer()
+                    return
+                }
+                self.didRepeatDelete = true
+                HapticManager.shared.playSpecialKey()
+                self.delegate?.keyViewDidTap(self)
+            }
+        }
+    }
+
+    private func stopRepeatDeleteTimer() {
+        repeatDeleteTimer?.invalidate()
+        repeatDeleteTimer = nil
+    }
+
+    public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard let touch = touches.first else { return }
+        initialTouchPoint = touch.location(in: self)
+        isHighlighted = true
+        isLongPressedTriggered = false
+        isCalloutActive = false
+        hasMovedBeyondTapThreshold = false
+        showPreviewPopup()
+        HapticManager.shared.playKeyTap()
+
+        if case .delete = key.type {
+            startRepeatDeleteTimer()
+        }
+
+        // Nhấn giữ theo cấu hình (mặc định 250ms chuẩn Gboard) để kích hoạt bong bóng Callout
+        let hasCallout = (KeyCalloutView.calloutItems(for: key.displayLabel, isShift: false) != nil) || (key.secondaryLabel != nil)
+        if hasCallout {
+            longPressTimer?.invalidate()
+            let delaySec = max(0.15, Double(vBoardSettings.shared.longPressDelayMs) / 1000.0)
+            longPressTimer = Timer.scheduledTimer(withTimeInterval: delaySec, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self = self, self.isHighlighted, !self.hasMovedBeyondTapThreshold else { return }
+                    self.isLongPressedTriggered = true
+                    self.hidePreviewPopup()
+                    self.isCalloutActive = true
+                    HapticManager.shared.playSpecialKey()
+                    self.delegate?.keyView(self, didRequestCalloutFor: self.key)
+                }
+            }
+        }
+    }
+
+    /// Hủy bỏ nhấn giữ ngay lập tức (dùng khi vuốt Glide hoặc nhận diện cử chỉ khác)
+    public func cancelLongPress() {
+        longPressTimer?.invalidate()
+        longPressTimer = nil
+        isLongPressedTriggered = false
+        isCalloutActive = false
+        hidePreviewPopup()
+        isHighlighted = false
+        hasMovedBeyondTapThreshold = true
+    }
+
+    public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesMoved(touches, with: event)
+        guard let touch = touches.first else { return }
+        let currentPoint = touch.location(in: self)
+        let dist = hypot(currentPoint.x - initialTouchPoint.x, currentPoint.y - initialTouchPoint.y)
+
+        if isCalloutActive {
+            if let container = superview {
+                let ptInContainer = touch.location(in: container)
+                delegate?.keyView(self, didUpdateCalloutTouch: ptInContainer)
+            }
+        } else {
+            // Khi ngón tay dịch chuyển quá 10pt (bắt đầu cử chỉ vuốt Glide / swipe typing):
+            // LẬP TỨC hủy timer nhấn giữ và đóng popup preview để không bao giờ bị nhầm thành long press hay tap!
+            if dist > 10.0 {
+                hasMovedBeyondTapThreshold = true
+                cancelLongPress()
+            }
+        }
+    }
+
+    public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        isHighlighted = false
+        hidePreviewPopup()
+        stopRepeatDeleteTimer()
+        longPressTimer?.invalidate()
+
+        if isCalloutActive {
+            isCalloutActive = false
+            _ = delegate?.keyViewDidEndCallout(self)
+        } else if !isLongPressedTriggered && !hasMovedBeyondTapThreshold {
+            if case .delete = key.type {
+                if !didRepeatDelete {
+                    delegate?.keyViewDidTap(self)
+                }
+            } else {
+                delegate?.keyViewDidTap(self)
+            }
+        }
+        didRepeatDelete = false
+        hasMovedBeyondTapThreshold = false
+    }
+
+    public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        isHighlighted = false
+        hidePreviewPopup()
+        stopRepeatDeleteTimer()
+        longPressTimer?.invalidate()
+        hasMovedBeyondTapThreshold = false
+
+        if isCalloutActive {
+            isCalloutActive = false
+            delegate?.keyViewDidCancelCallout(self)
+        }
+        didRepeatDelete = false
+    }
+
+    public override var isHighlighted: Bool {
+        didSet {
+            alpha = isHighlighted ? 0.7 : 1.0
+        }
+    }
+}
+#endif
