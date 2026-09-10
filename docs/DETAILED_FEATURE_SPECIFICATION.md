@@ -184,6 +184,7 @@ Người dùng có thể bật/tắt và tự kéo thả sắp xếp thứ tự 
   ```
 - Lưu mảng định danh: `vBoardSettings.toolbarItemsOrder: [String]`. Mặc định tinh gọn gồm `["dev", "undoRedo", "quickSettings", "oneHanded"]` (loại bỏ nút Bảng tạm riêng lẻ do đã tích hợp vào phím Paste).
 - Đồng bộ Darwin IPC: `SuggestionBarView` lập tức render lại thứ tự icon theo cấu hình mới.
+- **Kích thước & Tỷ lệ chuẩn:** Chiều cao thanh đạt **`42.0 pt`** (chuẩn Apple HIG touch target), kích thước chữ gợi ý `16.5 pt` (chính giữa) và `15.0 pt` (hai bên), vách ngăn `18.0 pt`, bề ngang nút công cụ mở rộng `38.0 pt - 48.0 pt` giúp thao tác bấm cực kỳ đầm tay và chuẩn xác.
 
 ---
 
