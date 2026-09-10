@@ -266,6 +266,16 @@ public final class vBoardSettings: @unchecked Sendable {
         static let isKeyBorderEnabled = "vboard_key_border_enabled"
         static let isGlideTrailEnabled = "vboard_glide_trail_enabled"
 
+        // OpenKey Enhanced Settings
+        static let isSpellingCheckEnabled = "vboard_spelling_check"
+        static let isFixBrowserSuggestionEnabled = "vboard_fix_browser_suggestion"
+        static let isRestoreIfWrongSpellingEnabled = "vboard_restore_wrong_spelling"
+        static let isAllowConsonantZFWJEnabled = "vboard_allow_zfwj"
+        static let isSmartSwitchModeEnabled = "vboard_smart_switch_mode"
+        static let isMacroEvenWhenOffEnabled = "vboard_macro_even_when_off"
+        static let isAutoCapsMacroEnabled = "vboard_auto_caps_macro"
+        static let isQuickStartConsonantEnabled = "vboard_quick_start_consonant"
+        static let isQuickEndConsonantEnabled = "vboard_quick_end_consonant"
     }
 
     // MARK: - Properties: OpenKey Core Settings
@@ -351,6 +361,105 @@ public final class vBoardSettings: @unchecked Sendable {
         }
         set {
             defaults.set(newValue, forKey: Keys.isAutoUndoEnabled)
+        }
+    }
+
+    /// Kiểm tra chính tả tiếng Việt (ngăn chặn bỏ dấu sai nguyên âm / phụ âm sai)
+    public var isSpellingCheckEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isSpellingCheckEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isSpellingCheckEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isSpellingCheckEnabled)
+        }
+    }
+
+    /// Sửa lỗi gợi ý nhập liệu (trình duyệt, thanh tìm kiếm...)
+    public var isFixBrowserSuggestionEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isFixBrowserSuggestionEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isFixBrowserSuggestionEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isFixBrowserSuggestionEnabled)
+        }
+    }
+
+    /// Tự khôi phục phím gốc với từ sai chính tả
+    public var isRestoreIfWrongSpellingEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isRestoreIfWrongSpellingEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isRestoreIfWrongSpellingEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isRestoreIfWrongSpellingEnabled)
+        }
+    }
+
+    /// Cho phép các ký tự "z, w, j, f" làm phụ âm (tên riêng, từ mượn ngoại lai...)
+    public var isAllowConsonantZFWJEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isAllowConsonantZFWJEnabled) == nil { return false }
+            return defaults.bool(forKey: Keys.isAllowConsonantZFWJEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isAllowConsonantZFWJEnabled)
+        }
+    }
+
+    /// Chuyển chế độ thông minh (tự động nhận biết tiếng Anh / tiếng Việt)
+    public var isSmartSwitchModeEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isSmartSwitchModeEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isSmartSwitchModeEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isSmartSwitchModeEnabled)
+        }
+    }
+
+    /// Gõ tắt cả khi tắt gõ tiếng Việt (chế độ tiếng Anh ABC)
+    public var isMacroEvenWhenOffEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isMacroEvenWhenOffEnabled) == nil { return false }
+            return defaults.bool(forKey: Keys.isMacroEvenWhenOffEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isMacroEvenWhenOffEnabled)
+        }
+    }
+
+    /// Tự động viết hoa / viết thường theo từ khóa gõ tắt
+    public var isAutoCapsMacroEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isAutoCapsMacroEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.isAutoCapsMacroEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isAutoCapsMacroEnabled)
+        }
+    }
+
+    /// Gõ tắt phụ âm đầu: f -> ph, j -> gi, w -> qu
+    public var isQuickStartConsonantEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isQuickStartConsonantEnabled) == nil { return false }
+            return defaults.bool(forKey: Keys.isQuickStartConsonantEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isQuickStartConsonantEnabled)
+        }
+    }
+
+    /// Gõ tắt phụ âm cuối: g -> ng, h -> nh, k -> ch
+    public var isQuickEndConsonantEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.isQuickEndConsonantEnabled) == nil { return false }
+            return defaults.bool(forKey: Keys.isQuickEndConsonantEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isQuickEndConsonantEnabled)
         }
     }
 

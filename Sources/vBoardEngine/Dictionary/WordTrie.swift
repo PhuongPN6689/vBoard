@@ -4,9 +4,30 @@ import Foundation
 public final class WordTrieNode: @unchecked Sendable {
     public var children: [Character: WordTrieNode] = [:]
     public var word: String?
+    public var asciiWord: String?
     public var frequency: Int = 0
+    public var topCandidates: [(word: String, ascii: String, freq: Int)] = []
 
     public init() {}
+
+    public func updateTopCandidate(word: String, ascii: String, frequency: Int, maxCapacity: Int = 30) {
+        let lowWord = word.lowercased()
+        if let idx = topCandidates.firstIndex(where: { $0.word.lowercased() == lowWord }) {
+            if frequency > topCandidates[idx].freq {
+                topCandidates[idx].freq = frequency
+                topCandidates.sort { $0.freq > $1.freq }
+            }
+            return
+        }
+        if topCandidates.count >= maxCapacity, let lastFreq = topCandidates.last?.freq, frequency <= lastFreq {
+            return
+        }
+        topCandidates.append((word: word, ascii: ascii, freq: frequency))
+        topCandidates.sort { $0.freq > $1.freq }
+        if topCandidates.count > maxCapacity {
+            topCandidates.removeLast()
+        }
+    }
 }
 
 /// Cây từ điển tiếng Việt nén siêu nhẹ, tra cứu tiền tố O(k) trong < 0.005ms
@@ -14,6 +35,7 @@ public final class WordTrie: @unchecked Sendable {
     public static let shared = WordTrie()
 
     private let root = WordTrieNode()
+    private let unaccentedRoot = WordTrieNode()
     private var isLoaded: Bool = false
     private let lock = NSLock()
     public private(set) var totalWordsCount: Int = 0
@@ -36,11 +58,51 @@ public final class WordTrie: @unchecked Sendable {
 
     private var glideBuckets: [GlideBucketKey: [GlideWordEntry]] = [:]
 
-    /// Loại bỏ dấu tiếng Việt chuyển thành ký tự ASCII thuần (để so khớp quỹ đạo vuốt)
+    /// Loại bỏ dấu tiếng Việt chuyển thành ký tự ASCII thuần (để so khớp quỹ đạo vuốt và gợi ý mềm)
     public static func stripDiacritics(_ text: String) -> String {
-        let s = text.replacingOccurrences(of: "đ", with: "d")
-                    .replacingOccurrences(of: "Đ", with: "d")
-        return s.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US")).lowercased()
+        var result = ""
+        result.reserveCapacity(text.count)
+        for ch in text {
+            switch ch {
+            case "a", "á", "à", "ả", "ã", "ạ",
+                 "ă", "ắ", "ằ", "ẳ", "ẵ", "ặ",
+                 "â", "ấ", "ầ", "ẩ", "ẫ", "ậ",
+                 "A", "Á", "À", "Ả", "Ã", "Ạ",
+                 "Ă", "Ắ", "Ằ", "Ẳ", "Ẵ", "Ặ",
+                 "Â", "Ấ", "Ầ", "Ẩ", "Ẫ", "Ậ":
+                result.append("a")
+            case "e", "é", "è", "ẻ", "ẽ", "ẹ",
+                 "ê", "ế", "ề", "ể", "ễ", "ệ",
+                 "E", "É", "È", "Ẻ", "Ẽ", "Ẹ",
+                 "Ê", "Ế", "Ề", "Ể", "Ễ", "Ệ":
+                result.append("e")
+            case "i", "í", "ì", "ỉ", "ĩ", "ị",
+                 "I", "Í", "Ì", "Ỉ", "Ĩ", "Ị":
+                result.append("i")
+            case "o", "ó", "ò", "ỏ", "õ", "ọ",
+                 "ô", "ố", "ồ", "ổ", "ỗ", "ộ",
+                 "ơ", "ớ", "ờ", "ở", "ỡ", "ợ",
+                 "O", "Ó", "Ò", "Ỏ", "Õ", "Ọ",
+                 "Ô", "Ố", "Ồ", "Ổ", "Ỗ", "Ộ",
+                 "Ơ", "Ớ", "Ờ", "Ở", "Ỡ", "Ợ":
+                result.append("o")
+            case "u", "ú", "ù", "ủ", "ũ", "ụ",
+                 "ư", "ứ", "ừ", "ử", "ữ", "ự",
+                 "U", "Ú", "Ù", "Ủ", "Ũ", "Ụ",
+                 "Ư", "Ứ", "Ừ", "Ử", "Ữ", "Ự":
+                result.append("u")
+            case "y", "ý", "ỳ", "ỷ", "ỹ", "ỵ",
+                 "Y", "Ý", "Ỳ", "Ỷ", "Ỹ", "Ỵ":
+                result.append("y")
+            case "d", "đ", "D", "Đ":
+                result.append("d")
+            case "A"..."Z":
+                result.append(ch.lowercased())
+            default:
+                result.append(ch)
+            }
+        }
+        return result
     }
 
     /// Tải lại từ điển từ file hoặc reset
@@ -48,6 +110,7 @@ public final class WordTrie: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         root.children.removeAll()
+        unaccentedRoot.children.removeAll()
         glideBuckets.removeAll()
         totalWordsCount = 0
         isLoaded = false
@@ -57,6 +120,9 @@ public final class WordTrie: @unchecked Sendable {
     /// Chèn một từ vào cây Trie kèm mức độ phổ biến (frequency càng cao càng ưu tiên)
     public func insert(word: String, frequency: Int = 1) {
         let lower = word.lowercased()
+        let ascii = WordTrie.stripDiacritics(word)
+
+        // 1. Chèn vào cây có dấu chính xác
         var current = root
         for char in lower {
             if let next = current.children[char] {
@@ -66,15 +132,31 @@ public final class WordTrie: @unchecked Sendable {
                 current.children[char] = newNode
                 current = newNode
             }
+            current.updateTopCandidate(word: word, ascii: ascii, frequency: frequency, maxCapacity: 30)
         }
         if current.word == nil {
             totalWordsCount += 1
         }
         current.word = word
+        current.asciiWord = ascii
         current.frequency = max(current.frequency, frequency)
 
-        // Đồng thời thêm vào chỉ mục vuốt phím Glide (theo chuỗi ASCII không dấu)
-        let ascii = WordTrie.stripDiacritics(word)
+        // 2. Chèn vào cây không dấu để gợi ý mềm (Soft / Diacritic-agnostic Suggestions)
+        if !ascii.isEmpty {
+            var uCurrent = unaccentedRoot
+            for char in ascii {
+                if let next = uCurrent.children[char] {
+                    uCurrent = next
+                } else {
+                    let newNode = WordTrieNode()
+                    uCurrent.children[char] = newNode
+                    uCurrent = newNode
+                }
+                uCurrent.updateTopCandidate(word: word, ascii: ascii, frequency: frequency, maxCapacity: 30)
+            }
+        }
+
+        // 3. Đồng thời thêm vào chỉ mục vuốt phím Glide (theo chuỗi ASCII không dấu)
         if !ascii.contains(" ") && ascii.count >= 2, let first = ascii.first, let last = ascii.last {
             let key = GlideBucketKey(first: first, last: last)
             let entry = GlideWordEntry(
@@ -87,52 +169,130 @@ public final class WordTrie: @unchecked Sendable {
         }
     }
 
-    /// Gợi ý các từ phù hợp nhất theo tiền tố đang gõ (prefix)
+    /// Gợi ý các từ phù hợp nhất theo tiền tố đang gõ (hỗ trợ gợi ý mềm không dấu và xếp hạng thông minh)
     public func suggest(prefix: String, limit: Int = 3) -> [String] {
         guard !prefix.isEmpty else { return [] }
-        let lower = prefix.lowercased()
+        let lowerPrefix = prefix.lowercased()
+        let asciiPrefix = WordTrie.stripDiacritics(lowerPrefix)
 
-        var current = root
-        for char in lower {
-            guard let next = current.children[char] else {
-                return []
+        let candidates: [(word: String, ascii: String, freq: Int)]
+
+        if lowerPrefix == asciiPrefix {
+            // Trường hợp gõ không dấu (ví dụ: 'nhu', 'vi', 'viet'):
+            // Tra cứu trực tiếp O(k) từ cây không dấu, không cấp phát Dictionary!
+            var uCurrent = unaccentedRoot
+            var uFound = true
+            for char in asciiPrefix {
+                if let next = uCurrent.children[char] {
+                    uCurrent = next
+                } else {
+                    uFound = false
+                    break
+                }
             }
-            current = next
+            guard uFound, !uCurrent.topCandidates.isEmpty else { return [] }
+            candidates = uCurrent.topCandidates
+        } else {
+            // Trường hợp gõ có dấu (ví dụ: 'như', 'việt'):
+            // Kết hợp kết quả từ cây có dấu chính xác và cây không dấu
+            var mergedDict: [String: (ascii: String, freq: Int)] = [:]
+            var exactCurrent = root
+            var exactFound = true
+            for char in lowerPrefix {
+                if let next = exactCurrent.children[char] {
+                    exactCurrent = next
+                } else {
+                    exactFound = false
+                    break
+                }
+            }
+            if exactFound {
+                for item in exactCurrent.topCandidates {
+                    mergedDict[item.word] = (ascii: item.ascii, freq: item.freq)
+                }
+            }
+
+            var uCurrent = unaccentedRoot
+            var uFound = true
+            for char in asciiPrefix {
+                if let next = uCurrent.children[char] {
+                    uCurrent = next
+                } else {
+                    uFound = false
+                    break
+                }
+            }
+            if uFound {
+                for item in uCurrent.topCandidates {
+                    let existingFreq = mergedDict[item.word]?.freq ?? 0
+                    mergedDict[item.word] = (ascii: item.ascii, freq: max(existingFreq, item.freq))
+                }
+            }
+            guard !mergedDict.isEmpty else { return [] }
+            candidates = mergedDict.map { (word: $0.key, ascii: $0.value.ascii, freq: $0.value.freq) }
         }
 
-        var results: [(word: String, freq: Int)] = []
-        collectWords(from: current, results: &results, maxCount: 20)
+        // Hệ thống tính điểm xếp hạng mềm (Soft Ranking)
+        let isSingleWordPrefix = !lowerPrefix.contains(" ")
+        var scoredCandidates: [(word: String, score: Double)] = []
+        scoredCandidates.reserveCapacity(candidates.count)
 
-        // Sắp xếp theo mức độ ưu tiên
-        results.sort {
-            if $0.freq != $1.freq {
-                return $0.freq > $1.freq
+        for item in candidates {
+            let lowWord = item.word.lowercased()
+            let lowAsciiWord = item.ascii
+
+            // Điểm cơ bản dựa vào tần suất ngữ liệu
+            var score: Double = Double(item.freq) * 2.0
+
+            // Thưởng khớp chính xác hoàn toàn từ có dấu
+            if lowWord == lowerPrefix {
+                score += 200.0
+            } else if lowWord.hasPrefix(lowerPrefix) {
+                score += 60.0
+            }
+
+            // Thưởng khớp từ không dấu (ví dụ: gõ 'nhu' khớp trọn vẹn với dạng không dấu của 'như', 'nhu')
+            if lowAsciiWord == asciiPrefix {
+                score += 100.0
+            } else if lowAsciiWord.hasPrefix(asciiPrefix) {
+                score += 40.0
+            }
+
+            // Phạt khoảng cách độ dài (từ gần với độ dài đang gõ hơn thì ưu tiên hơn)
+            let lengthDiff = abs(lowWord.count - lowerPrefix.count)
+            score += max(0.0, 30.0 - Double(lengthDiff) * 5.0)
+
+            // Ưu tiên từ đơn âm tiết nếu tiền tố người dùng gõ là từ đơn âm tiết
+            if isSingleWordPrefix && !lowWord.contains(" ") {
+                score += 25.0
+            }
+
+            scoredCandidates.append((word: item.word, score: score))
+        }
+
+        // Sắp xếp theo score giảm dần
+        scoredCandidates.sort {
+            if $0.score != $1.score {
+                return $0.score > $1.score
             }
             return $0.word.count < $1.word.count
         }
 
+        // Trích xuất danh sách duy nhất theo giới hạn
         var finalWords: [String] = []
         var seen = Set<String>()
-
-        // Nếu tiền tố chính nó là một từ hợp lệ
-        if let exact = current.word {
-            let lowExact = exact.lowercased()
-            finalWords.append(lowExact)
-            seen.insert(lowExact)
-        }
-
-        for item in results {
+        for item in scoredCandidates {
             let low = item.word.lowercased()
             if !seen.contains(low) {
                 seen.insert(low)
-                finalWords.append(low)
+                finalWords.append(item.word)
                 if finalWords.count >= limit {
                     break
                 }
             }
         }
 
-        return Array(finalWords.prefix(limit))
+        return finalWords
     }
 
     /// Gợi ý từ theo quỹ đạo vuốt (Glide / Swipe Typing)
@@ -208,16 +368,6 @@ public final class WordTrie: @unchecked Sendable {
         return Array(candidates.prefix(limit).map { $0.word })
     }
 
-    private func collectWords(from node: WordTrieNode, results: inout [(word: String, freq: Int)], maxCount: Int) {
-        if results.count >= maxCount { return }
-        if let word = node.word {
-            results.append((word: word, freq: node.frequency))
-        }
-        for (_, child) in node.children {
-            collectWords(from: child, results: &results, maxCount: maxCount)
-        }
-    }
-
     // MARK: - Bộ từ vựng tiếng Việt tần suất cao
     private func loadCommonVietnameseWords() {
         lock.lock()
@@ -233,7 +383,7 @@ public final class WordTrie: @unchecked Sendable {
         // 2. Dự phòng danh sách nhúng cứng sẵn nếu không tìm thấy tệp
         let highFreq: [(String, Int)] = [
             ("và", 100), ("là", 98), ("của", 96), ("có", 95), ("được", 94), ("trong", 93),
-            ("một", 92), ("cho", 91), ("với", 90), ("không", 89), ("các", 88), ("những", 87),
+            ("một", 92), ("cho", 91), ("với", 90), ("không", 89), ("nhưng", 88), ("các", 88), ("những", 87),
             ("người", 86), ("khi", 85), ("này", 84), ("đã", 83), ("đến", 82), ("từ", 81),
             ("về", 80), ("sẽ", 79), ("như", 78), ("để", 77), ("ra", 76), ("ở", 75),
             ("lại", 74), ("làm", 73), ("thì", 72), ("nhiều", 71), ("vào", 70), ("theo", 69),

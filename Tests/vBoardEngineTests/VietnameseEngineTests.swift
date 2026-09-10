@@ -278,6 +278,68 @@ struct VietnameseEngineTests {
         let proxy7 = MockTextDocumentProxy()
         proxy7.typeSequence("w", adapter: adapter)
         #expect(proxy7.buffer == "w")
+
+        // 8. Kiểm tra bật/tắt Gõ nhanh phụ âm đầu OpenKey (f->ph, j->gi, w->qu)
+        engine.isQuickStartConsonantEnabled = false
+        let proxy8a = MockTextDocumentProxy()
+        proxy8a.typeSequence("fa", adapter: adapter)
+        #expect(proxy8a.buffer == "fa")
+
+        engine.isQuickStartConsonantEnabled = true
+        let proxy8b = MockTextDocumentProxy()
+        proxy8b.typeSequence("fa", adapter: adapter)
+        #expect(proxy8b.buffer == "pha")
+
+        let proxy8c = MockTextDocumentProxy()
+        proxy8c.typeSequence("je", adapter: adapter)
+        #expect(proxy8c.buffer == "gie")
+
+        let proxy8d = MockTextDocumentProxy()
+        proxy8d.typeSequence("wa", adapter: adapter)
+        #expect(proxy8d.buffer == "qua")
+
+        // 9. Kiểm tra bật/tắt Gõ nhanh phụ âm cuối OpenKey (g->ng, h->nh, k->ch)
+        engine.isQuickEndConsonantEnabled = false
+        let proxy9a = MockTextDocumentProxy()
+        proxy9a.typeSequence("tieng", adapter: adapter)
+        #expect(proxy9a.buffer == "tieng")
+
+        engine.isQuickEndConsonantEnabled = true
+        let proxy9b = MockTextDocumentProxy()
+        proxy9b.typeSequence("tag", adapter: adapter)
+        #expect(proxy9b.buffer == "tang")
+
+        let proxy9c = MockTextDocumentProxy()
+        proxy9c.typeSequence("tah", adapter: adapter)
+        #expect(proxy9c.buffer == "tanh")
+
+        let proxy9d = MockTextDocumentProxy()
+        proxy9d.typeSequence("tak", adapter: adapter)
+        #expect(proxy9d.buffer == "tach")
+
+        // 10. Kiểm tra Quick Telex uu -> ươ
+        let proxy10 = MockTextDocumentProxy()
+        proxy10.typeSequence("tuuj", adapter: adapter)
+        #expect(proxy10.buffer == "tượ")
+
+        // 11. Kiểm tra chuyển đổi phong cách đặt dấu oà/uý (cũ) vs òa/úy (mới)
+        engine.diacriticStyle = .oldStyle
+        let proxy11a = MockTextDocumentProxy()
+        proxy11a.typeSequence("hoaf", adapter: adapter)
+        #expect(proxy11a.buffer == "hoà")
+
+        let proxy11b = MockTextDocumentProxy()
+        proxy11b.typeSequence("thuyf", adapter: adapter)
+        #expect(proxy11b.buffer == "thuỳ")
+
+        engine.diacriticStyle = .newStyle
+        let proxy11c = MockTextDocumentProxy()
+        proxy11c.typeSequence("hoaf", adapter: adapter)
+        #expect(proxy11c.buffer == "hòa")
+
+        let proxy11d = MockTextDocumentProxy()
+        proxy11d.typeSequence("thuyf", adapter: adapter)
+        #expect(proxy11d.buffer == "thùy")
     }
 
     @Test("Kiểm tra gợi ý từ thông minh và so khớp cử chỉ vuốt phím (Glide)")
@@ -327,6 +389,38 @@ struct VietnameseEngineTests {
         let timePerQueryMs = (elapsed / Double(iterations)) * 1000.0
         print("\n⚡️ TỐC ĐỘ GỢI Ý TỪ: \(String(format: "%.5f", timePerQueryMs)) ms / lần tra cứu (\(iterations) lần)")
         #expect(timePerQueryMs < 0.10)
+    }
+
+    @Test("Kiểm tra gợi ý từ mềm không dấu (Diacritic-agnostic / Soft Suggestion)")
+    func testDiacriticAgnosticSoftSuggestions() {
+        let trie = WordTrie.shared
+
+        // 1. Khi gõ 'nhu', gợi ý cả 'như', 'nhưng', 'những' thay vì chỉ tiền tố cứng
+        let suggestionsNhu = trie.suggest(prefix: "nhu", limit: 5)
+        print("\n💡 GỢI Ý TỪ CHO 'nhu': \(suggestionsNhu)")
+        #expect(suggestionsNhu.contains("như") || suggestionsNhu.contains("nhưng") || suggestionsNhu.contains("những"))
+        #expect(suggestionsNhu.contains("nhưng"), "Gõ 'nhu' phải gợi ý từ 'nhưng'")
+
+        // 2. Khi gõ 'viet', gợi ý 'Việt', 'viết'
+        let suggestionsViet = trie.suggest(prefix: "viet", limit: 5)
+        print("💡 GỢI Ý TỪ CHO 'viet': \(suggestionsViet)")
+        #expect(suggestionsViet.contains("Việt") || suggestionsViet.contains("việt"))
+        #expect(suggestionsViet.contains("viết"))
+
+        // 3. Khi gõ 'nguoi', gợi ý 'người'
+        let suggestionsNguoi = trie.suggest(prefix: "nguoi", limit: 5)
+        print("💡 GỢI Ý TỪ CHO 'nguoi': \(suggestionsNguoi)")
+        #expect(suggestionsNguoi.contains("người"))
+
+        // 4. Khi gõ 'duoc', gợi ý 'được'
+        let suggestionsDuoc = trie.suggest(prefix: "duoc", limit: 5)
+        print("💡 GỢI Ý TỪ CHO 'duoc': \(suggestionsDuoc)")
+        #expect(suggestionsDuoc.contains("được"))
+
+        // 5. Khi gõ 'khong', gợi ý 'không'
+        let suggestionsKhong = trie.suggest(prefix: "khong", limit: 5)
+        print("💡 GỢI Ý TỪ CHO 'khong': \(suggestionsKhong)")
+        #expect(suggestionsKhong.contains("không"))
     }
 
     @Test("Kiểm tra quản lý lịch sử Bảng tạm (ClipboardManager)")

@@ -381,5 +381,587 @@ struct OpenKeyEngineTests {
             #expect(failedList.isEmpty, "Có từ gõ VNI không ra đúng")
         }
     }
+
+    @Test("Kiểm tra gõ tắt phụ âm đầu OpenKey (f->ph, j->gi, w->qu)")
+    func testQuickStartConsonants() {
+        let engine = VietnameseEngine()
+        engine.isQuickStartConsonantEnabled = true
+
+        // f + a -> pha
+        let a1 = engine.processKeystroke("f", contextBefore: "")
+        #expect(a1.textToInsert == "f")
+        let a2 = engine.processKeystroke("a", contextBefore: "f")
+        #expect(a2.deleteCount == 1)
+        #expect(a2.textToInsert == "pha")
+
+        // F + a -> Pha
+        let b1 = engine.processKeystroke("a", contextBefore: "F")
+        #expect(b1.deleteCount == 1)
+        #expect(b1.textToInsert == "Pha")
+
+        // j + o -> gio
+        let c1 = engine.processKeystroke("o", contextBefore: "j")
+        #expect(c1.deleteCount == 1)
+        #expect(c1.textToInsert == "gio")
+
+        // w + a -> qua
+        let d1 = engine.processKeystroke("a", contextBefore: "w")
+        #expect(d1.deleteCount == 1)
+        #expect(d1.textToInsert == "qua")
+    }
+
+    @Test("Kiểm tra gõ tắt phụ âm cuối OpenKey (g->ng, h->nh, k->ch)")
+    func testQuickEndConsonants() {
+        let engine = VietnameseEngine()
+        engine.isQuickEndConsonantEnabled = true
+
+        // ta + g -> tang
+        let a1 = engine.processKeystroke("g", contextBefore: "ta")
+        #expect(a1.deleteCount == 0)
+        #expect(a1.textToInsert == "ng")
+
+        // ta + h -> tanh
+        let b1 = engine.processKeystroke("h", contextBefore: "ta")
+        #expect(b1.deleteCount == 0)
+        #expect(b1.textToInsert == "nh")
+
+        // ta + k -> tach
+        let c1 = engine.processKeystroke("k", contextBefore: "ta")
+        #expect(c1.deleteCount == 0)
+        #expect(c1.textToInsert == "ch")
+    }
+
+    @Test("Kiểm tra Macro Auto Caps trong TextProxyAdapter")
+    @MainActor
+    func testMacroAutoCaps() {
+        let adapter = TextProxyAdapter()
+        ShortcutManager.shared.addShortcut(shortcut: "dc", replacement: "được")
+
+        // 1. Viết thường: dc -> được
+        let proxy1 = MockTextDocumentProxy()
+        proxy1.insertText("dc")
+        adapter.handleSpace(proxy: proxy1)
+        #expect(proxy1.buffer == "được ")
+
+        // 2. Viết hoa chữ đầu: Dc -> Được
+        let proxy2 = MockTextDocumentProxy()
+        proxy2.insertText("Dc")
+        adapter.handleSpace(proxy: proxy2)
+        #expect(proxy2.buffer == "Được ")
+
+        // 3. Viết hoa toàn bộ: DC -> ĐƯỢC
+        let proxy3 = MockTextDocumentProxy()
+        proxy3.insertText("DC")
+        adapter.handleSpace(proxy: proxy3)
+        #expect(proxy3.buffer == "ĐƯỢC ")
+    }
+
+    @Test("Kiểm tra các cờ cấu hình mới trong vBoardSettings")
+    func testNewSettingsStorage() {
+        let settings = vBoardSettings.shared
+
+        settings.isSpellingCheckEnabled = false
+        #expect(settings.isSpellingCheckEnabled == false)
+        settings.isSpellingCheckEnabled = true
+        #expect(settings.isSpellingCheckEnabled == true)
+
+        settings.isQuickStartConsonantEnabled = true
+        #expect(settings.isQuickStartConsonantEnabled == true)
+        settings.isQuickStartConsonantEnabled = false
+        #expect(settings.isQuickStartConsonantEnabled == false)
+
+        settings.isQuickEndConsonantEnabled = true
+        #expect(settings.isQuickEndConsonantEnabled == true)
+        settings.isQuickEndConsonantEnabled = false
+        #expect(settings.isQuickEndConsonantEnabled == false)
+
+        settings.isMacroEvenWhenOffEnabled = true
+        #expect(settings.isMacroEvenWhenOffEnabled == true)
+        settings.isMacroEvenWhenOffEnabled = false
+        #expect(settings.isMacroEvenWhenOffEnabled == false)
+    }
+
+    // MARK: - Ma trận Gõ tắt Phụ âm đầu (f->ph, j->gi, w->qu)
+    @Test("Ma trận Gõ tắt phụ âm đầu (f->ph, j->gi, w->qu) với đầy đủ nguyên âm và chữ hoa/thường")
+    @MainActor
+    func testQuickStartConsonantMatrix() {
+        let engine = VietnameseEngine()
+        engine.isQuickStartConsonantEnabled = true
+
+        let matrixCases: [(prefix: String, vowel: String, expected: String)] = [
+            // f -> ph (thường)
+            ("f", "a", "pha"),
+            ("f", "e", "phe"),
+            ("f", "i", "phi"),
+            ("f", "o", "pho"),
+            ("f", "u", "phu"),
+            ("f", "y", "phy"),
+            // F -> Ph (hoa)
+            ("F", "a", "Pha"),
+            ("F", "e", "Phe"),
+            ("F", "o", "Pho"),
+            ("F", "u", "Phu"),
+            // j -> gi (thường)
+            ("j", "a", "gia"),
+            ("j", "e", "gie"),
+            ("j", "i", "gi"),
+            ("j", "o", "gio"),
+            ("j", "u", "giu"),
+            // J -> Gi (hoa)
+            ("J", "a", "Gia"),
+            ("J", "o", "Gio"),
+            ("J", "u", "Giu"),
+            // w -> qu (thường)
+            ("w", "a", "qua"),
+            ("w", "e", "que"),
+            ("w", "i", "qui"),
+            ("w", "o", "quo"),
+            ("w", "y", "quy"),
+            // W -> Qu (hoa)
+            ("W", "a", "Qua"),
+            ("W", "e", "Que"),
+            ("W", "y", "Quy")
+        ]
+
+        for item in matrixCases {
+            let adapter = TextProxyAdapter(engine: engine)
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.prefix + item.vowel, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ '\(item.prefix)\(item.vowel)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+    }
+
+    // MARK: - Ma trận Gõ tắt Phụ âm cuối (g->ng, h->nh, k->ch)
+    @Test("Ma trận Gõ tắt phụ âm cuối (g->ng, h->nh, k->ch) sau mọi nguyên âm")
+    @MainActor
+    func testQuickEndConsonantMatrix() {
+        let engine = VietnameseEngine()
+        engine.isQuickEndConsonantEnabled = true
+
+        let matrixCases: [(base: String, endKey: String, expected: String)] = [
+            // g -> ng
+            ("ta", "g", "tang"),
+            ("ba", "g", "bang"),
+            ("to", "g", "tong"),
+            ("du", "g", "dung"),
+            ("co", "g", "cong"),
+            ("le", "g", "leng"),
+            ("luo", "g", "luong"),
+            ("tie", "g", "tieng"),
+            // h -> nh
+            ("ta", "h", "tanh"),
+            ("ba", "h", "banh"),
+            ("ca", "h", "canh"),
+            ("da", "h", "danh"),
+            ("ti", "h", "tinh"),
+            ("mi", "h", "minh"),
+            ("xi", "h", "xinh"),
+            // k -> ch
+            ("ta", "k", "tach"),
+            ("ba", "k", "bach"),
+            ("ca", "k", "cach"),
+            ("ti", "k", "tich"),
+            ("li", "k", "lich"),
+            ("e", "k", "ech")
+        ]
+
+        for item in matrixCases {
+            let adapter = TextProxyAdapter(engine: engine)
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.base + item.endKey, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ '\(item.base)\(item.endKey)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+    }
+
+    // MARK: - Kết hợp Phụ âm đầu và Phụ âm cuối trong cùng một từ
+    @Test("Kiểm tra gõ kết hợp cả phụ âm đầu rút gọn và phụ âm cuối rút gọn trong 1 từ")
+    @MainActor
+    func testCombinedStartAndEndConsonants() {
+        let engine = VietnameseEngine()
+        engine.isQuickStartConsonantEnabled = true
+        engine.isQuickEndConsonantEnabled = true
+
+        let cases: [(input: String, expected: String)] = [
+            ("fag", "phang"), // f->ph, a, g->ng
+            ("fah", "phanh"), // f->ph, a, h->nh
+            ("fak", "phach"), // f->ph, a, k->ch
+            ("jag", "giang"), // j->gi, a, g->ng
+            ("wah", "quanh"), // w->qu, a, h->nh
+            ("wag", "quang")  // w->qu, a, g->ng
+        ]
+
+        for item in cases {
+            let adapter = TextProxyAdapter(engine: engine)
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+    }
+
+    // MARK: - Kiểm tra Toàn diện Đặt Dấu Thanh: Chuẩn Cũ (oà, uý) vs Chuẩn Mới (òa, úy)
+    @Test("Kiểm tra chi tiết quy tắc đặt dấu Chuẩn Cũ (oà, uý) vs Chuẩn Mới (òa, úy)")
+    @MainActor
+    func testDiacriticStyleSwitchingMatrix() {
+        let engine = VietnameseEngine()
+
+        let wordPairs: [(input: String, modern: String, classic: String)] = [
+            ("hoaf", "hòa", "hoà"),
+            ("hoas", "hóa", "hoá"),
+            ("hoar", "hỏa", "hoả"),
+            ("hoax", "hõa", "hoã"),
+            ("hoaj", "họa", "hoạ"),
+            ("khoer", "khỏe", "khoẻ"),
+            ("thuyf", "thùy", "thuỳ"),
+            ("thuys", "thúy", "thuý"),
+            ("thuyr", "thủy", "thuỷ"),
+            ("thuyx", "thũy", "thuỹ"),
+            ("thuyj", "thụy", "thuỵ"),
+            ("xoaf", "xòa", "xoà"),
+            ("loaj", "lọa", "loạ")
+        ]
+
+        for item in wordPairs {
+            // 1. Kiểm tra Chuẩn Mới
+            engine.diacriticStyle = .newStyle
+            let adapterModern = TextProxyAdapter(engine: engine)
+            let proxyModern = MockTextDocumentProxy()
+            proxyModern.typeSequence(item.input, adapter: adapterModern)
+            #expect(proxyModern.buffer == item.modern, "Chuẩn mới gõ '\(item.input)' phải ra '\(item.modern)', thực tế: '\(proxyModern.buffer)'")
+
+            // 2. Kiểm tra Chuẩn Cũ
+            engine.diacriticStyle = .oldStyle
+            let adapterClassic = TextProxyAdapter(engine: engine)
+            let proxyClassic = MockTextDocumentProxy()
+            proxyClassic.typeSequence(item.input, adapter: adapterClassic)
+            #expect(proxyClassic.buffer == item.classic, "Chuẩn cũ gõ '\(item.input)' phải ra '\(item.classic)', thực tế: '\(proxyClassic.buffer)'")
+        }
+    }
+
+    // MARK: - Kiểm tra Tắt Gõ tắt (Disable Shortcut Expansion)
+    @Test("Kiểm tra khi tắt gõ tắt thì nhấn Space không bị thay thế")
+    @MainActor
+    func testMacroDisabledDoesNotExpand() {
+        let adapter = TextProxyAdapter()
+        ShortcutManager.shared.addShortcut(shortcut: "dc", replacement: "được")
+
+        vBoardSettings.shared.isShortcutExpansionEnabled = false
+
+        let proxy = MockTextDocumentProxy()
+        proxy.insertText("dc")
+        adapter.handleSpace(proxy: proxy)
+        #expect(proxy.buffer == "dc ", "Khi tắt gõ tắt, 'dc' + space phải giữ nguyên 'dc '")
+
+        // Khôi phục lại trạng thái bật
+        vBoardSettings.shared.isShortcutExpansionEnabled = true
+    }
+
+    // MARK: - Kiểm tra CRUD ShortcutManager (Thêm, Sửa, Xóa, Reset)
+    @Test("Kiểm tra CRUD toàn diện trên ShortcutManager")
+    func testShortcutManagerCRUD() {
+        let manager = ShortcutManager.shared
+
+        // Thêm mới
+        manager.addShortcut(shortcut: "testkey", replacement: "giá trị thử nghiệm")
+        #expect(manager.replacement(for: "testkey") == "giá trị thử nghiệm")
+        #expect(manager.replacement(for: "TESTKEY") == "giá trị thử nghiệm") // case-insensitive
+
+        // Xóa
+        manager.deleteShortcut(shortcut: "testkey")
+        #expect(manager.replacement(for: "testkey") == nil)
+
+        // Reset về mặc định
+        manager.resetToDefaults()
+        let defaultsList = manager.getShortcuts()
+        #expect(defaultsList.contains { $0.shortcut == "dc" })
+        #expect(defaultsList.contains { $0.shortcut == "vn" })
+    }
+
+    // MARK: - Kiểm tra Gõ tắt Phụ âm kết hợp Bỏ dấu (vd: fair => phải)
+    @Test("Kiểm tra gõ tắt phụ âm kết hợp bỏ dấu thanh và nhiều nguyên âm (fair -> phải, fangs -> phóng/phẳng, jair -> giải)")
+    @MainActor
+    func testQuickConsonantsWithTonesAndComplexWords() {
+        let engine = VietnameseEngine()
+        engine.isQuickStartConsonantEnabled = true
+        engine.isQuickEndConsonantEnabled = true
+        let adapter = TextProxyAdapter(engine: engine)
+
+        let testCases: [(input: String, expected: String)] = [
+            // f -> ph kết hợp các dấu thanh (s, f, r, x, j)
+            ("fair", "phải"),
+            ("fais", "phái"),
+            ("faif", "phài"),
+            ("faix", "phãi"),
+            ("faij", "phại"),
+            ("fas", "phá"),
+            ("faf", "phà"),
+            ("far", "phả"),
+            ("fax", "phã"),
+            ("faj", "phạ"),
+            ("fats", "phát"),
+            ("fans", "phán"),
+            ("fongf", "phòng"),
+            ("fongs", "phóng"),
+            ("Fair", "Phải"),
+            ("FAIR", "PHẢI"),
+
+            // j -> gi kết hợp bỏ dấu
+            ("jair", "giải"),
+            ("jais", "giái"),
+            ("jaif", "giài"),
+            ("jaix", "giãi"),
+            ("jaij", "giại"),
+            ("jas", "giá"),
+            ("jaf", "già"),
+            ("jar", "giả"),
+            ("jax", "giã"),
+            ("jaj", "giạ"),
+            ("Jair", "Giải"),
+
+            // w -> qu kết hợp bỏ dấu
+            ("wair", "quải"),
+            ("wais", "quái"),
+            ("waif", "quài"),
+            ("waix", "quãi"),
+            ("waij", "quại"),
+            ("was", "quá"),
+            ("waf", "quà"),
+            ("war", "quả"),
+            ("wax", "quã"),
+            ("waj", "quạ"),
+            ("Wair", "Quải"),
+
+            // f + nguyên âm + phụ âm cuối rút gọn g->ng, h->nh + dấu thanh
+            ("fags", "pháng"),
+            ("fagf", "phàng"),
+            ("fagr", "phảng"),
+            ("fahs", "phánh"),
+            ("faks", "phách"),
+            ("fakt", "phacht")
+        ]
+
+        for item in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+    }
+
+    // MARK: - Kiểm tra Toàn diện các Ca biên lai ghép và Tổ hợp Nuance sâu sắc
+    @Test("Kiểm tra toàn diện các ca biên lai ghép (j+i, w+u, dấu thanh trước phụ âm cuối rút gọn, đổi dấu trực tiếp, hoàn tác w)")
+    @MainActor
+    func testAdvancedEdgeCasesAndNuancedCombinations() {
+        let engine = VietnameseEngine()
+        engine.isQuickStartConsonantEnabled = true
+        engine.isQuickEndConsonantEnabled = true
+        engine.isWAtWordBeginningEnabled = true
+        engine.isAutoUndoEnabled = true
+        engine.isModernToneBalancingEnabled = true
+        let adapter = TextProxyAdapter(engine: engine)
+
+        let testCases: [(input: String, expected: String)] = [
+            // 1. Phụ âm 'j' kết hợp âm bắt đầu bằng 'i' (giếng, gì, gí, gỉ, gĩ, gị, gìn)
+            ("jif", "gì"),
+            ("jis", "gí"),
+            ("jir", "gỉ"),
+            ("jix", "gĩ"),
+            ("jij", "gị"),
+            ("jieengs", "giếng"),
+            ("jieengf", "giềng"),
+            ("jinf", "gìn"),
+            ("jins", "gín"),
+            ("Jif", "Gì"),
+            ("JIEENGS", "GIẾNG"),
+
+            // 2. Phụ âm 'w' kết hợp 'u' và các vần (quốc, quyền, quắn, quơ, quờng)
+            ("wuoocs", "quốc"),
+            ("wuoocj", "quộc"),
+            ("wuyeens", "quyến"),
+            ("wuyeenf", "quyền"),
+            ("wuyeenr", "quyển"),
+            ("waws", "quắ"),
+            ("wawns", "quắn"),
+            ("wawf", "quằ"),
+            ("wawnf", "quằn"),
+            ("wows", "quớ"),
+            ("wowf", "quờ"),
+            ("wowngf", "quờng"),
+            ("WUOOCS", "QUỐC"),
+            ("WUYEENS", "QUYẾN"),
+
+            // 3. Gõ DẤU THANH TRƯỚC phụ âm cuối rút gọn (tasg -> táng, tash -> tánh, task -> tách)
+            ("tasg", "táng"),
+            ("tafg", "tàng"),
+            ("targ", "tảng"),
+            ("taxg", "tãng"),
+            ("tajg", "tạng"),
+            ("tash", "tánh"),
+            ("tafh", "tành"),
+            ("tarh", "tảnh"),
+            ("taxh", "tãnh"),
+            ("tajh", "tạnh"),
+            ("task", "tách"),
+            ("tajk", "tạch"),
+
+            // Kết hợp cả phụ âm đầu rút gọn + dấu thanh trước phụ âm cuối rút gọn
+            ("fasg", "pháng"),
+            ("fash", "phánh"),
+            ("fask", "phách"),
+            ("fajk", "phạch"),
+            ("wasg", "quáng"),
+            ("wash", "quánh"),
+            ("wask", "quách"),
+            ("wajk", "quạch"),
+            ("jasg", "giáng"),
+            ("jash", "giánh"),
+            ("jask", "giách"),
+            ("jajk", "giạch"),
+
+            // 4. Phụ âm đầu rút gọn kết hợp nguyên âm phức tạp
+            ("foong", "phông"),
+            ("foongs", "phống"),
+            ("foongf", "phồng"),
+            ("fongf", "phòng"),
+            ("fongs", "phóng"),
+            ("fuowng", "phương"),
+            ("fuowngf", "phường"),
+            ("fuowngs", "phướng"),
+            ("feens", "phến"),
+            ("juowngf", "giường"),
+            ("juoongj", "giuộng"),
+            ("jups", "giúp"),
+
+            // 5. Đổi dấu thanh trực tiếp giữa các phím dấu (Tone replacement)
+            ("cafs", "cá"),
+            ("casf", "cà"),
+            ("cars", "cá"),
+            ("toansf", "toàn"),
+            ("toanfr", "toản"),
+
+            // 6. Phím 'w' độc lập ở đầu từ & các dấu thanh
+            ("ws", "ứ"),
+            ("wf", "ừ"),
+            ("wr", "ử"),
+            ("wx", "ữ"),
+            ("wj", "ự"),
+            ("ww", "w"),
+            ("wweb", "web"),
+
+            // 7. Từ chứa phụ âm ngoại lai z, j, f, w kết hợp cơ chế hoàn tác gõ đúp tiếng Anh
+            ("zalo", "zalo"),
+            ("zooom", "zoom"),
+            ("jjava", "java"),
+            ("ffan", "fan")
+        ]
+
+        for item in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+    }
+
+    // MARK: - Kiểm tra Siêu Toàn Diện: Ngoặc Vuông, Hoàn Tác Gõ Đúp, Tổ hợp w+o, Simple Telex
+    @Test("Kiểm tra Siêu Toàn Diện: Ngoặc vuông [[/]], Hoàn tác gõ đúp Quick Telex và phụ âm cuối, Tổ hợp w+o->ươ, Simple Telex")
+    @MainActor
+    func testUltraComprehensiveTypingNuancesAndRestores() {
+        let engine = VietnameseEngine()
+        engine.isQuickStartConsonantEnabled = true
+        engine.isQuickEndConsonantEnabled = true
+        engine.isQuickTelexEnabled = true
+        engine.isBracketShortcutsEnabled = true
+        engine.isWAtWordBeginningEnabled = true
+        engine.isAutoUndoEnabled = true
+        engine.isModernToneBalancingEnabled = true
+        let adapter = TextProxyAdapter(engine: engine)
+
+        // 1. Kiểm tra gõ đúp ngoặc vuông để khôi phục ký tự gốc: [[ -> [, ]] -> ], {{ -> {, }} -> }
+        let bracketCases: [(input: String, expected: String)] = [
+            ("[[", "["),
+            ("]]", "]"),
+            ("{{", "{"),
+            ("}}", "}"),
+            ("t[", "tơ"),
+            ("t[[", "t["),
+            ("t]", "tư"),
+            ("t]]", "t]")
+        ]
+        for item in bracketCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ ngoặc '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+
+        // 2. Kiểm tra gõ đúp phụ âm cuối rút gọn để khôi phục từ tiếng Anh: tagg -> tag, ahh -> ah, okk -> ok
+        let endConsonantUndoCases: [(input: String, expected: String)] = [
+            ("tagg", "tag"),
+            ("dogg", "dog"),
+            ("blogg", "blog"),
+            ("tahh", "tah"),
+            ("ahh", "ah"),
+            ("ohh", "oh"),
+            ("takk", "tak"),
+            ("okk", "ok"),
+            ("boookk", "book")
+        ]
+        for item in endConsonantUndoCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ đúp phụ âm cuối '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+
+        // 3. Kiểm tra gõ lặp 3 lần Quick Telex để khôi phục từ tiếng Anh: accc -> acc, appp -> app, connn -> conn, httt -> htt
+        let quickTelexUndoCases: [(input: String, expected: String)] = [
+            ("accc", "acc"),
+            ("appp", "app"),
+            ("connn", "conn"),
+            ("httt", "htt")
+        ]
+        for item in quickTelexUndoCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Gõ đúp Quick Telex '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+
+        // 4. Kiểm tra tổ hợp gõ tắt w sau phụ âm + o -> ươ (thwong -> thương, nwocs -> nước, trwongf -> trường)
+        let wPlusOCases: [(input: String, expected: String)] = [
+            ("thwong", "thương"),
+            ("thwongs", "thướng"),
+            ("nwoc", "nươc"),
+            ("nwocs", "nước"),
+            ("trwong", "trương"),
+            ("trwongf", "trường"),
+            ("ddwocj", "được"),
+            ("ddwongf", "đường"),
+            ("xwong", "xương"),
+            ("rwouj", "rượu"),
+            ("chwa", "chưa"),
+            ("cwar", "cửa"),
+            ("mwas", "mứa"),
+            ("mwaj", "mựa")
+        ]
+        for item in wPlusOCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: adapter)
+            #expect(proxy.buffer == item.expected, "Tổ hợp w+o '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+
+        // 5. Kiểm tra Simple Telex (tự động ie->iê, uo->uô khi có phụ âm cuối)
+        let simpleEngine = VietnameseEngine(inputMethod: .simpleTelex)
+        let simpleAdapter = TextProxyAdapter(engine: simpleEngine)
+        let simpleCases: [(input: String, expected: String)] = [
+            ("tieng", "tiêng"),
+            ("tiengs", "tiếng"),
+            ("biets", "biết"),
+            ("viets", "viết"),
+            ("muons", "muốn"),
+            ("buonf", "buồn"),
+            ("cuocj", "cuộc")
+        ]
+        for item in simpleCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(item.input, adapter: simpleAdapter)
+            #expect(proxy.buffer == item.expected, "Simple Telex '\(item.input)' phải ra '\(item.expected)', thực tế: '\(proxy.buffer)'")
+        }
+    }
 }
 

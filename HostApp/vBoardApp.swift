@@ -572,80 +572,350 @@ struct ThemeSettingsView: View {
     }
 }
 
-// MARK: - 7. Màn hình Bộ gõ OpenKey (OpenKeySettingsView)
+// MARK: - 7. Màn hình Thiết lập OpenKey (Bộ gõ & Gõ tắt chuẩn OpenKey)
 
 struct OpenKeySettingsView: View {
     @Binding var currentMethod: InputMethod
 
+    @State private var selectedTab: Int = 0 // 0: Bộ gõ, 1: Gõ tắt
+
+    // Tab 1: Bộ gõ States
     @State private var method: InputMethod = vBoardSettings.shared.inputMethod
-    @State private var style: DiacriticStyle = vBoardSettings.shared.diacriticStyle
-    @State private var isQuickTelex: Bool = vBoardSettings.shared.isQuickTelexEnabled
+    @State private var isOldStyleDiacritic: Bool = (vBoardSettings.shared.diacriticStyle == .oldStyle)
+    @State private var isSpellingCheck: Bool = vBoardSettings.shared.isSpellingCheckEnabled
+    @State private var isFixBrowserSuggestion: Bool = vBoardSettings.shared.isFixBrowserSuggestionEnabled
+    @State private var isRestoreWrongSpelling: Bool = vBoardSettings.shared.isRestoreIfWrongSpellingEnabled
+    @State private var isAutoCapitalization: Bool = vBoardSettings.shared.isAutoCapitalizationEnabled
+    @State private var isAllowZFWJ: Bool = vBoardSettings.shared.isAllowConsonantZFWJEnabled
+    @State private var isSmartSwitchMode: Bool = vBoardSettings.shared.isSmartSwitchModeEnabled
+
+    // Tiện ích bổ trợ Telex
     @State private var isBrackets: Bool = vBoardSettings.shared.isBracketShortcutsEnabled
     @State private var isZRemove: Bool = vBoardSettings.shared.isZKeyRemoveToneEnabled
     @State private var isWBeginning: Bool = vBoardSettings.shared.isWAtWordBeginningEnabled
     @State private var isToneBalancing: Bool = vBoardSettings.shared.isModernToneBalancingEnabled
 
+    // Tab 2: Gõ tắt States
+    @State private var isMacroEnabled: Bool = vBoardSettings.shared.isShortcutExpansionEnabled
+    @State private var isQuickTelex: Bool = vBoardSettings.shared.isQuickTelexEnabled
+    @State private var isMacroEvenWhenOff: Bool = vBoardSettings.shared.isMacroEvenWhenOffEnabled
+    @State private var isAutoCapsMacro: Bool = vBoardSettings.shared.isAutoCapsMacroEnabled
+    @State private var isQuickStartConsonant: Bool = vBoardSettings.shared.isQuickStartConsonantEnabled
+    @State private var isQuickEndConsonant: Bool = vBoardSettings.shared.isQuickEndConsonantEnabled
+
+    @State private var showMacroTableSheet: Bool = false
+
     var body: some View {
-        Form {
-            Section(header: Text("Phương thức nhập liệu")) {
-                Picker("Kiểu gõ", selection: $method) {
-                    Text("Telex (Chuẩn đầy đủ)").tag(InputMethod.telex)
-                    Text("Simple Telex (Đơn giản)").tag(InputMethod.simpleTelex)
-                    Text("VNI (Gõ số)").tag(InputMethod.vni)
-                }
-                .pickerStyle(.inline)
-                .onChange(of: method) { val in
-                    vBoardSettings.shared.inputMethod = val
-                    currentMethod = val
-                    vBoardSettings.shared.notifySettingsChanged()
-                }
+        VStack(spacing: 0) {
+            // Bộ chọn Tab phong cách OpenKey
+            Picker("Chế độ thiết lập", selection: $selectedTab) {
+                Text("Bộ gõ").tag(0)
+                Text("Gõ tắt").tag(1)
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color(UIColor.secondarySystemBackground))
 
-            Section(header: Text("Quy tắc đặt dấu thanh")) {
-                Picker("Phong cách đặt dấu", selection: $style) {
-                    Text("Chuẩn Mới (hòa, khỏe, thủy)").tag(DiacriticStyle.newStyle)
-                    Text("Chuẩn Cũ (hoà, khoẻ, thuỷ)").tag(DiacriticStyle.oldStyle)
+            Form {
+                if selectedTab == 0 {
+                    // ==========================================
+                    // TAB 1: BỘ GÕ (media_1788971919722.png)
+                    // ==========================================
+                    Section(header: Text("Kiểu gõ tiếng Việt")) {
+                        Picker("Phương thức nhập", selection: $method) {
+                            Text("Telex (Chuẩn đầy đủ)").tag(InputMethod.telex)
+                            Text("Simple Telex (Đơn giản)").tag(InputMethod.simpleTelex)
+                            Text("VNI (Gõ số)").tag(InputMethod.vni)
+                        }
+                        .pickerStyle(.inline)
+                        .onChange(of: method) { val in
+                            vBoardSettings.shared.inputMethod = val
+                            currentMethod = val
+                            vBoardSettings.shared.notifySettingsChanged()
+                        }
+                    }
+
+                    Section {
+                        // 1. Đặt dấu oà, uý (thay vì òa, úy)
+                        Toggle("Đặt dấu oà, uý (thay vì òa, úy)", isOn: $isOldStyleDiacritic)
+                            .onChange(of: isOldStyleDiacritic) { val in
+                                vBoardSettings.shared.diacriticStyle = val ? .oldStyle : .newStyle
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 2. Kiểm tra chính tả
+                        Toggle("Kiểm tra chính tả", isOn: $isSpellingCheck)
+                            .onChange(of: isSpellingCheck) { val in
+                                vBoardSettings.shared.isSpellingCheckEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 3. Sửa lỗi gợi ý (trình duyệt, Excel,...)
+                        Toggle("Sửa lỗi gợi ý (trình duyệt, Excel,...)", isOn: $isFixBrowserSuggestion)
+                            .onChange(of: isFixBrowserSuggestion) { val in
+                                vBoardSettings.shared.isFixBrowserSuggestionEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 4. Tự khôi phục phím với từ sai
+                        Toggle("Tự khôi phục phím với từ sai", isOn: $isRestoreWrongSpelling)
+                            .onChange(of: isRestoreWrongSpelling) { val in
+                                vBoardSettings.shared.isRestoreIfWrongSpellingEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 5. Viết Hoa chữ cái đầu câu
+                        Toggle("Viết Hoa chữ cái đầu câu", isOn: $isAutoCapitalization)
+                            .onChange(of: isAutoCapitalization) { val in
+                                vBoardSettings.shared.isAutoCapitalizationEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 6. Cho phép "z w j f" làm phụ âm
+                        Toggle("Cho phép \"z w j f\" làm phụ âm", isOn: $isAllowZFWJ)
+                            .onChange(of: isAllowZFWJ) { val in
+                                vBoardSettings.shared.isAllowConsonantZFWJEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 7. Chuyển chế độ thông minh
+                        Toggle("Chuyển chế độ thông minh", isOn: $isSmartSwitchMode)
+                            .onChange(of: isSmartSwitchMode) { val in
+                                vBoardSettings.shared.isSmartSwitchModeEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+                    } header: {
+                        Text("Tùy chọn bộ gõ OpenKey")
+                    } footer: {
+                        Text("Các phím tắt desktop (^, ⌘) và bảng mã theo ứng dụng đã được tự động tối ưu phù hợp với nền tảng iOS.")
+                            .font(.caption2)
+                    }
+
+                    Section(header: Text("Tùy chọn tiện ích Telex bổ sung")) {
+                        Toggle("Phím ngoặc vuông: [ -> ơ, ] -> ư", isOn: $isBrackets)
+                            .onChange(of: isBrackets) { val in
+                                vBoardSettings.shared.isBracketShortcutsEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        Toggle("Phím Z: Gỡ bỏ dấu thanh", isOn: $isZRemove)
+                            .onChange(of: isZRemove) { val in
+                                vBoardSettings.shared.isZKeyRemoveToneEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        Toggle("Phím W đầu từ chuyển thành 'ư'", isOn: $isWBeginning)
+                            .onChange(of: isWBeginning) { val in
+                                vBoardSettings.shared.isWAtWordBeginningEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        Toggle("Tự động cân bằng dấu khi thêm phụ âm cuối", isOn: $isToneBalancing)
+                            .onChange(of: isToneBalancing) { val in
+                                vBoardSettings.shared.isModernToneBalancingEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+                    }
+                } else {
+                    // ==========================================
+                    // TAB 2: GÕ TẮT (media_1788971935717.png)
+                    // ==========================================
+                    Section {
+                        // 1. Cho phép gõ tắt
+                        Toggle("Cho phép gõ tắt", isOn: $isMacroEnabled)
+                            .onChange(of: isMacroEnabled) { val in
+                                vBoardSettings.shared.isShortcutExpansionEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 2. Gõ tắt cả khi tắt gõ tiếng Việt
+                        Toggle("Gõ tắt cả khi tắt gõ tiếng Việt", isOn: $isMacroEvenWhenOff)
+                            .disabled(!isMacroEnabled)
+                            .onChange(of: isMacroEvenWhenOff) { val in
+                                vBoardSettings.shared.isMacroEvenWhenOffEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 3. Tự động viết hoa theo phím tắt
+                        Toggle("Tự động viết hoa theo phím tắt", isOn: $isAutoCapsMacro)
+                            .disabled(!isMacroEnabled)
+                            .onChange(of: isAutoCapsMacro) { val in
+                                vBoardSettings.shared.isAutoCapsMacroEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // Nút Mở Bảng gõ tắt...
+                        Button {
+                            showMacroTableSheet = true
+                        } label: {
+                            HStack {
+                                Label("Bảng gõ tắt...", systemImage: "list.bullet.rectangle.portrait")
+                                    .fontWeight(.medium)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    } header: {
+                        Text("Cấu hình Gõ tắt (Macro)")
+                    }
+
+                    Section {
+                        // 4. Gõ nhanh (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th, uu=ươ)
+                        Toggle("Gõ nhanh (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th, uu=ươ)", isOn: $isQuickTelex)
+                            .onChange(of: isQuickTelex) { val in
+                                vBoardSettings.shared.isQuickTelexEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 5. Gõ tắt phụ âm đầu: f->ph, j->gi, w->qu
+                        Toggle("Gõ tắt phụ âm đầu: f->ph, j->gi, w->qu", isOn: $isQuickStartConsonant)
+                            .onChange(of: isQuickStartConsonant) { val in
+                                vBoardSettings.shared.isQuickStartConsonantEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+
+                        // 6. Gõ tắt phụ âm cuối: g->ng, h->nh, k->ch
+                        Toggle("Gõ tắt phụ âm cuối: g->ng, h->nh, k->ch", isOn: $isQuickEndConsonant)
+                            .onChange(of: isQuickEndConsonant) { val in
+                                vBoardSettings.shared.isQuickEndConsonantEnabled = val
+                                vBoardSettings.shared.notifySettingsChanged()
+                            }
+                    } header: {
+                        Text("Tiện ích Gõ Nhanh Phụ Âm (Quick Consonants)")
+                    } footer: {
+                        Text("Tự động chuyển đổi phụ âm ngay khi gõ nguyên âm kế tiếp hoặc kết thúc từ.")
+                            .font(.caption2)
+                    }
                 }
-                .pickerStyle(.inline)
-                .onChange(of: style) { val in
-                    vBoardSettings.shared.diacriticStyle = val
-                    vBoardSettings.shared.notifySettingsChanged()
-                }
-
-                Toggle("Tự động cân bằng dấu khi thêm phụ âm cuối", isOn: $isToneBalancing)
-                    .onChange(of: isToneBalancing) { val in
-                        vBoardSettings.shared.isModernToneBalancingEnabled = val
-                        vBoardSettings.shared.notifySettingsChanged()
-                    }
-            }
-
-            Section(header: Text("Tiện ích gõ OpenKey nâng cao")) {
-                Toggle("Quick Telex (cc->ch, gg->gi, nn->ng...)", isOn: $isQuickTelex)
-                    .onChange(of: isQuickTelex) { val in
-                        vBoardSettings.shared.isQuickTelexEnabled = val
-                        vBoardSettings.shared.notifySettingsChanged()
-                    }
-
-                Toggle("Phím ngoặc vuông: [ -> ơ, ] -> ư", isOn: $isBrackets)
-                    .onChange(of: isBrackets) { val in
-                        vBoardSettings.shared.isBracketShortcutsEnabled = val
-                        vBoardSettings.shared.notifySettingsChanged()
-                    }
-
-                Toggle("Phím Z: Gỡ bỏ dấu thanh", isOn: $isZRemove)
-                    .onChange(of: isZRemove) { val in
-                        vBoardSettings.shared.isZKeyRemoveToneEnabled = val
-                        vBoardSettings.shared.notifySettingsChanged()
-                    }
-
-                Toggle("Phím W đầu từ chuyển thành 'ư'", isOn: $isWBeginning)
-                    .onChange(of: isWBeginning) { val in
-                        vBoardSettings.shared.isWAtWordBeginningEnabled = val
-                        vBoardSettings.shared.notifySettingsChanged()
-                    }
             }
         }
-        .navigationTitle("Bộ gõ OpenKey")
+        .navigationTitle("Thiết lập OpenKey")
+        .sheet(isPresented: $showMacroTableSheet) {
+            NavigationStack {
+                MacroManagementView()
+            }
+        }
+    }
+}
+
+// MARK: - Màn hình Bảng gõ tắt (Macro Management View)
+
+struct MacroManagementView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var shortcuts: [ShortcutEntry] = ShortcutManager.shared.getShortcuts()
+    @State private var searchText: String = ""
+    @State private var newShortcut: String = ""
+    @State private var newReplacement: String = ""
+    @State private var showAddAlert: Bool = false
+
+    var filteredShortcuts: [ShortcutEntry] {
+        if searchText.isEmpty {
+            return shortcuts
+        }
+        return shortcuts.filter {
+            $0.shortcut.localizedCaseInsensitiveContains(searchText) ||
+            $0.replacement.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section(header: Text("Thêm từ gõ tắt mới")) {
+                VStack(spacing: 8) {
+                    TextField("Từ viết tắt (ví dụ: dc, ko, vn)", text: $newShortcut)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .textFieldStyle(.roundedBorder)
+
+                    TextField("Từ mở rộng đầy đủ (ví dụ: được, không, Việt Nam)", text: $newReplacement)
+                        .textFieldStyle(.roundedBorder)
+
+                    Button {
+                        let sc = newShortcut.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let rep = newReplacement.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !sc.isEmpty && !rep.isEmpty {
+                            ShortcutManager.shared.addShortcut(shortcut: sc, replacement: rep)
+                            shortcuts = ShortcutManager.shared.getShortcuts()
+                            newShortcut = ""
+                            newReplacement = ""
+                        }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label("Thêm vào bảng gõ tắt", systemImage: "plus.circle.fill")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(newShortcut.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                              newReplacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section {
+                ForEach(filteredShortcuts) { item in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.shortcut)
+                                .font(.headline)
+                                .foregroundStyle(.blue)
+                            Text(item.replacement)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 2)
+                }
+                .onDelete { indexSet in
+                    for idx in indexSet {
+                        let item = filteredShortcuts[idx]
+                        ShortcutManager.shared.deleteShortcut(shortcut: item.shortcut)
+                    }
+                    shortcuts = ShortcutManager.shared.getShortcuts()
+                }
+            } header: {
+                HStack {
+                    Text("Danh sách từ gõ tắt (\(filteredShortcuts.count))")
+                    Spacer()
+                }
+            } footer: {
+                Text("Vuốt sang trái để xóa một từ gõ tắt.")
+                    .font(.caption2)
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    ShortcutManager.shared.resetToDefaults()
+                    shortcuts = ShortcutManager.shared.getShortcuts()
+                } label: {
+                    HStack {
+                        Spacer()
+                        Label("Khôi phục bảng gõ tắt mặc định", systemImage: "arrow.counterclockwise")
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .navigationTitle("Bảng gõ tắt")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, prompt: "Tìm kiếm từ viết tắt...")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Đóng") {
+                    dismiss()
+                }
+            }
+        }
+        .onAppear {
+            shortcuts = ShortcutManager.shared.getShortcuts()
+        }
     }
 }
 

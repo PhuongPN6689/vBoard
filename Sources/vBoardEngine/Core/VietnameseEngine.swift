@@ -10,6 +10,11 @@ public final class VietnameseEngine: @unchecked Sendable {
     public var isZKeyRemoveToneEnabled: Bool = true
     public var isWAtWordBeginningEnabled: Bool = true
     public var isModernToneBalancingEnabled: Bool = true
+    public var isQuickStartConsonantEnabled: Bool = false
+    public var isQuickEndConsonantEnabled: Bool = false
+    public var isSpellingCheckEnabled: Bool = true
+    public var isRestoreIfWrongSpellingEnabled: Bool = true
+    public var isAllowConsonantZFWJEnabled: Bool = false
 
     public init(
         inputMethod: InputMethod = .telex,
@@ -18,7 +23,12 @@ public final class VietnameseEngine: @unchecked Sendable {
         isBracketShortcutsEnabled: Bool = true,
         isZKeyRemoveToneEnabled: Bool = true,
         isWAtWordBeginningEnabled: Bool = true,
-        isModernToneBalancingEnabled: Bool = true
+        isModernToneBalancingEnabled: Bool = true,
+        isQuickStartConsonantEnabled: Bool = false,
+        isQuickEndConsonantEnabled: Bool = false,
+        isSpellingCheckEnabled: Bool = true,
+        isRestoreIfWrongSpellingEnabled: Bool = true,
+        isAllowConsonantZFWJEnabled: Bool = false
     ) {
         self.inputMethod = inputMethod
         self.diacriticStyle = diacriticStyle
@@ -27,6 +37,11 @@ public final class VietnameseEngine: @unchecked Sendable {
         self.isZKeyRemoveToneEnabled = isZKeyRemoveToneEnabled
         self.isWAtWordBeginningEnabled = isWAtWordBeginningEnabled
         self.isModernToneBalancingEnabled = isModernToneBalancingEnabled
+        self.isQuickStartConsonantEnabled = isQuickStartConsonantEnabled
+        self.isQuickEndConsonantEnabled = isQuickEndConsonantEnabled
+        self.isSpellingCheckEnabled = isSpellingCheckEnabled
+        self.isRestoreIfWrongSpellingEnabled = isRestoreIfWrongSpellingEnabled
+        self.isAllowConsonantZFWJEnabled = isAllowConsonantZFWJEnabled
     }
 
     /// Trích xuất từ hiện tại (cuối cùng) từ ngữ cảnh trước con trỏ
@@ -63,6 +78,9 @@ public final class VietnameseEngine: @unchecked Sendable {
     }
 
     private var lastWasStandaloneW: Bool = false
+    private var didRestoreW: Bool = false
+    private var didRestoreJ: Bool = false
+    private var didRestoreF: Bool = false
 
     // MARK: - Xử lý Telex
 
@@ -70,17 +88,40 @@ public final class VietnameseEngine: @unchecked Sendable {
         let lowerChar = Character(char.lowercased())
         let isUpper = char.isUppercase
 
-        // Phím ngoặc vuông theo chuẩn OpenKey Telex: [ -> ơ, ] -> ư, { -> Ơ, } -> Ư
+        // Phím ngoặc vuông theo chuẩn OpenKey Telex: [ -> ơ, ] -> ư, { -> Ơ, } -> Ư (Gõ đúp để khôi phục [, ], {, })
         if isBracketShortcutsEnabled {
-            if char == "[" { return .insertOnly("ơ") }
-            if char == "{" { return .insertOnly("Ơ") }
-            if char == "]" { return .insertOnly("ư") }
-            if char == "}" { return .insertOnly("Ư") }
+            if char == "[" {
+                if currentWord.hasSuffix("ơ") {
+                    return EngineAction(deleteCount: 1, textToInsert: "[")
+                }
+                return .insertOnly("ơ")
+            }
+            if char == "{" {
+                if currentWord.hasSuffix("Ơ") {
+                    return EngineAction(deleteCount: 1, textToInsert: "{")
+                }
+                return .insertOnly("Ơ")
+            }
+            if char == "]" {
+                if currentWord.hasSuffix("ư") {
+                    return EngineAction(deleteCount: 1, textToInsert: "]")
+                }
+                return .insertOnly("ư")
+            }
+            if char == "}" {
+                if currentWord.hasSuffix("Ư") {
+                    return EngineAction(deleteCount: 1, textToInsert: "}")
+                }
+                return .insertOnly("Ư")
+            }
         }
 
         // Nếu từ hiện tại rỗng (bắt đầu từ mới)
         if currentWord.isEmpty {
-            // Trường hợp gõ phím 'w' ở đầu từ -> chuyển thành 'ư' / 'Ư'
+            didRestoreW = false
+            didRestoreJ = false
+            didRestoreF = false
+            // Trường hợp gõ phím 'w' ở đầu từ
             if isWAtWordBeginningEnabled && lowerChar == "w" {
                 lastWasStandaloneW = true
                 let replaced = isUpper ? "Ư" : "ư"
@@ -93,8 +134,27 @@ public final class VietnameseEngine: @unchecked Sendable {
         // Trường hợp từ hiện tại là "ư" hoặc "Ư" từ phím 'w' đầu từ và gõ tiếp "w" -> khôi phục về "w" / "W"
         if lastWasStandaloneW && (currentWord == "ư" || currentWord == "Ư") && lowerChar == "w" {
             lastWasStandaloneW = false
+            didRestoreW = true
             let replaced = char.isUppercase ? "W" : "w"
             return EngineAction(deleteCount: 1, textToInsert: replaced)
+        }
+
+        // Hoàn tác gõ đúp jj -> j và ff -> f để gõ các từ tiếng Anh (java, facebook, fan)
+        if (currentWord == "j" || currentWord == "J") && lowerChar == "j" {
+            didRestoreJ = true
+            let replaced = char.isUppercase ? "J" : "j"
+            return EngineAction(deleteCount: 1, textToInsert: replaced)
+        }
+        if (currentWord == "f" || currentWord == "F") && lowerChar == "f" {
+            didRestoreF = true
+            let replaced = char.isUppercase ? "F" : "f"
+            return EngineAction(deleteCount: 1, textToInsert: replaced)
+        }
+
+        // 0. Kiểm tra gõ tắt phụ âm đầu OpenKey: f->ph, j->gi, w->qu (khi gõ tiếp nguyên âm)
+        if let action = handleQuickStartConsonant(char: char, word: currentWord) {
+            lastWasStandaloneW = false
+            return action
         }
         lastWasStandaloneW = false
 
@@ -127,12 +187,42 @@ public final class VietnameseEngine: @unchecked Sendable {
             }
         }
 
-        // 5. Kiểm tra Quick Telex (cc->ch, gg->gi, kk->kh, nn->ng, qq->qu, pp->ph, tt->th)
+        // 5. Kiểm tra gõ tắt phụ âm cuối OpenKey: g->ng, h->nh, k->ch (khi đứng sau nguyên âm hoặc hoàn tác gõ đúp)
+        if let action = handleQuickEndConsonant(char: char, word: currentWord) {
+            return action
+        }
+
+        // 6. Kiểm tra Quick Telex (cc->ch, gg->gi, kk->kh, nn->ng, qq->qu, pp->ph, tt->th, uu->ươ)
         if let action = handleQuickTelex(char: char, word: currentWord) {
             return action
         }
 
-        // 6. Nếu từ đã có dấu và người dùng gõ thêm phụ âm cuối -> Tự động cân bằng lại vị trí dấu thanh
+        // 6.5. Xử lý Simple Telex: tự động ie->iê, uo->uô khi gõ phụ âm cuối
+        if inputMethod == .simpleTelex {
+            var parsed = parseSyllable(from: currentWord)
+            if parsed.suffix.isEmpty && parsed.vowels.count == 2 {
+                let v0Base = parsed.vowels[0].base.lowercased()
+                let v1Base = parsed.vowels[1].base.lowercased()
+                let v1Shape = parsed.vowels[1].shape
+
+                // ie -> iê (tieng -> tiêng, biet -> biêt, viet -> viêt)
+                if v0Base == "i" && v1Base == "e" && v1Shape == .plain {
+                    parsed.vowels[1].shape = .circumflex
+                    parsed.suffix.append(char)
+                    let rendered = parsed.render(style: diacriticStyle)
+                    return EngineAction(deleteCount: currentWord.count, textToInsert: rendered)
+                }
+                // uo -> uô (muon -> muôn, buon -> buôn, cuoc -> cuôc)
+                if v0Base == "u" && v1Base == "o" && v1Shape == .plain && parsed.vowels[0].shape == .plain {
+                    parsed.vowels[1].shape = .circumflex
+                    parsed.suffix.append(char)
+                    let rendered = parsed.render(style: diacriticStyle)
+                    return EngineAction(deleteCount: currentWord.count, textToInsert: rendered)
+                }
+            }
+        }
+
+        // 7. Nếu từ đã có dấu và người dùng gõ thêm phụ âm cuối -> Tự động cân bằng lại vị trí dấu thanh
         if isModernToneBalancingEnabled {
             let parsed = parseSyllable(from: currentWord)
             if parsed.tone != .none && !parsed.vowels.isEmpty {
@@ -185,6 +275,16 @@ public final class VietnameseEngine: @unchecked Sendable {
                 return EngineAction(deleteCount: 0, textToInsert: replaced)
             }
             return nil
+        }
+
+        // Xử lý 'o' sau 'ư' -> 'ươ' (ví dụ: thw -> thư, gõ o -> thươ; nw -> nư, gõ o -> nươ; trw -> trư, gõ o -> trươ)
+        if lowerChar == "o" && parsed.vowels.count == 1 && parsed.suffix.isEmpty {
+            let v0 = parsed.vowels[0]
+            if v0.base.lowercased() == "u" && v0.shape == .horn {
+                parsed.vowels.append(VowelUnit(base: "o", shape: .horn, isUpper: char.isUppercase))
+                let newWord = parsed.render(style: diacriticStyle)
+                return EngineAction(deleteCount: word.count, textToInsert: newWord)
+            }
         }
 
         // Xử lý 'w': biến a->ă, o->ơ, u->ư, uo->ươ, ua->ưa
@@ -267,6 +367,14 @@ public final class VietnameseEngine: @unchecked Sendable {
 
         // Xử lý phím lặp nguyên âm: a+a -> â, e+e -> ê, o+o -> ô (kể cả gõ trễ sau phụ âm cuối như mot+o -> môt, viet+e -> viêt)
         if let targetIdx = parsed.vowels.indices.last(where: { Character(parsed.vowels[$0].base.lowercased()) == lowerChar }) {
+            // Nếu đã có phụ âm cuối, chỉ cho phép gõ trễ mũ nếu phụ âm cuối đó là phụ âm cuối tiếng Việt hợp lệ
+            if !parsed.suffix.isEmpty {
+                let validFinals = ["c", "ch", "m", "n", "ng", "nh", "p", "t"]
+                guard validFinals.contains(parsed.suffix.lowercased()) else {
+                    return nil
+                }
+            }
+
             let v = parsed.vowels[targetIdx]
             let baseLower = Character(v.base.lowercased())
 
@@ -370,6 +478,31 @@ public final class VietnameseEngine: @unchecked Sendable {
         guard isQuickTelexEnabled, !word.isEmpty else { return nil }
         let lowerChar = Character(char.lowercased())
         let isUpper = char.isUppercase
+        let lowerWord = word.lowercased()
+
+        // Hoàn tác gõ đúp Quick Telex: ch+c -> cc, gi+g -> gg, kh+k -> kk, ng+n -> nn, qu+q -> qq, ph+p -> pp, th+t -> tt, ươ+u -> uu
+        if lowerWord.hasSuffix("ch") && lowerChar == "c" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "CC" : "cc")
+        }
+        if lowerWord.hasSuffix("gi") && lowerChar == "g" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "GG" : "gg")
+        }
+        if lowerWord.hasSuffix("kh") && lowerChar == "k" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "KK" : "kk")
+        }
+        if lowerWord.hasSuffix("ng") && lowerChar == "n" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "NN" : "nn")
+        }
+        if lowerWord.hasSuffix("qu") && lowerChar == "q" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "QQ" : "qq")
+        }
+        if lowerWord.hasSuffix("ph") && lowerChar == "p" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "PP" : "pp")
+        }
+        if lowerWord.hasSuffix("th") && lowerChar == "t" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "TT" : "tt")
+        }
+
         guard let lastChar = word.last else { return nil }
         let lowerLast = Character(lastChar.lowercased())
 
@@ -379,6 +512,8 @@ public final class VietnameseEngine: @unchecked Sendable {
                 let rep: Character = isUpper ? "H" : "h"
                 return EngineAction(deleteCount: 0, textToInsert: String(rep))
             case "g":
+                // Chỉ kích hoạt gg -> gi cho phụ âm đầu (khi từ chưa có nguyên âm)
+                guard parseSyllable(from: word).vowels.isEmpty else { return nil }
                 let rep: Character = isUpper ? "I" : "i"
                 return EngineAction(deleteCount: 0, textToInsert: String(rep))
             case "k":
@@ -396,11 +531,116 @@ public final class VietnameseEngine: @unchecked Sendable {
             case "t":
                 let rep: Character = isUpper ? "H" : "h"
                 return EngineAction(deleteCount: 0, textToInsert: String(rep))
+            case "u":
+                // uu -> ươ (theo chuẩn OpenKey Quick Telex)
+                let rep: String = isUpper ? "Ơ" : "ơ"
+                return EngineAction(deleteCount: 1, textToInsert: (word.last?.isUppercase == true ? "Ư" : "ư") + rep)
             default:
                 break
             }
         }
         return nil
+    }
+
+    // MARK: - OpenKey Gõ tắt phụ âm đầu: f->ph, j->gi, w->qu
+    private func handleQuickStartConsonant(char: Character, word: String) -> EngineAction? {
+        guard isQuickStartConsonantEnabled else { return nil }
+        let lowerChar = Character(char.lowercased())
+
+        // Chỉ kích hoạt khi gõ nguyên âm sau phụ âm đầu đơn f, j, w (hoặc 'ư' tạo ra từ 'w' đầu từ)
+        let isVowel = VietnameseChar.decompose(lowerChar) != nil || lowerChar == "a" || lowerChar == "e" || lowerChar == "i" || lowerChar == "o" || lowerChar == "u" || lowerChar == "y"
+        guard isVowel else { return nil }
+
+        if word.count == 1, let firstChar = word.first {
+            if didRestoreW && (firstChar == "w" || firstChar == "W") {
+                didRestoreW = false
+                return nil
+            }
+            if didRestoreJ && (firstChar == "j" || firstChar == "J") {
+                didRestoreJ = false
+                return nil
+            }
+            if didRestoreF && (firstChar == "f" || firstChar == "F") {
+                didRestoreF = false
+                return nil
+            }
+            let isFirstUpper = firstChar.isUppercase
+            let isCharUpper = char.isUppercase
+            let isAllUpper = isFirstUpper && isCharUpper
+
+            switch firstChar.lowercased() {
+            case "f":
+                let rep = isAllUpper ? "PH" : (isFirstUpper ? "Ph" : "ph")
+                return EngineAction(deleteCount: 1, textToInsert: rep + String(char))
+            case "j":
+                let rep = isAllUpper ? "GI" : (isFirstUpper ? "Gi" : "gi")
+                // Trong tiếng Việt, 'gi' kết hợp nguyên âm 'i' (gì, gí, giếng, gìn...) thì 'gi' đã chứa sẵn nguyên âm 'i'
+                if lowerChar == "i" {
+                    return EngineAction(deleteCount: 1, textToInsert: rep)
+                }
+                return EngineAction(deleteCount: 1, textToInsert: rep + String(char))
+            case "w", "ư":
+                let rep = isAllUpper ? "QU" : (isFirstUpper ? "Qu" : "qu")
+                // 'qu' đã kết thúc bằng 'u', nếu gõ tiếp 'u' (như wuoocs -> quốc, wuyeens -> quyến) thì không lặp lại 'u'
+                if lowerChar == "u" {
+                    return EngineAction(deleteCount: 1, textToInsert: rep)
+                }
+                return EngineAction(deleteCount: 1, textToInsert: rep + String(char))
+            default:
+                break
+            }
+        }
+        return nil
+    }
+
+    // MARK: - OpenKey Gõ tắt phụ âm cuối: g->ng, h->nh, k->ch
+    private func handleQuickEndConsonant(char: Character, word: String) -> EngineAction? {
+        guard isQuickEndConsonantEnabled, !word.isEmpty else { return nil }
+        let lowerChar = Character(char.lowercased())
+        let isUpper = char.isUppercase
+        let lowerWord = word.lowercased()
+
+        // Hoàn tác gõ đúp phụ âm cuối rút gọn: tag -> tang + g -> tag, tah -> tanh + h -> tah, tak -> tach + k -> tak
+        if lowerWord.hasSuffix("ng") && lowerChar == "g" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "G" : "g")
+        }
+        if lowerWord.hasSuffix("nh") && lowerChar == "h" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "H" : "h")
+        }
+        if lowerWord.hasSuffix("ch") && lowerChar == "k" {
+            return EngineAction(deleteCount: 2, textToInsert: isUpper ? "K" : "k")
+        }
+
+        // Phải là sau một nguyên âm tiếng Việt và chưa có phụ âm cuối
+        var parsed = parseSyllable(from: word)
+        guard !parsed.vowels.isEmpty && parsed.suffix.isEmpty else { return nil }
+
+        let isAllWordUpper = word.allSatisfy { $0.isUppercase }
+        let rep: String
+        switch lowerChar {
+        case "g":
+            // g -> ng
+            rep = (isUpper || isAllWordUpper) ? "NG" : "ng"
+        case "h":
+            // h -> nh
+            rep = (isUpper || isAllWordUpper) ? "NH" : "nh"
+        case "k":
+            // k -> ch
+            rep = (isUpper || isAllWordUpper) ? "CH" : "ch"
+        default:
+            return nil
+        }
+
+        // Nếu từ trước đó chưa có dấu thanh, chỉ cần chèn tiếp phụ âm cuối rút gọn
+        if parsed.tone == .none {
+            return EngineAction(deleteCount: 0, textToInsert: rep)
+        }
+
+        // Nếu từ trước đó đã có dấu thanh, cập nhật phụ âm cuối và render lại âm tiết hoàn chỉnh
+        // Giúp tự động cân bằng lại dấu thanh theo đúng âm luật (ví dụ: tasg -> táng, toasg -> toáng)
+        parsed.suffix = rep
+        let rendered = parsed.render(style: diacriticStyle)
+        return EngineAction(deleteCount: word.count, textToInsert: rendered)
     }
 
     // MARK: - Phân tích chuỗi thành Syllable theo chuẩn OpenKey
@@ -459,7 +699,9 @@ public final class VietnameseEngine: @unchecked Sendable {
 
     /// Đặt lại trạng thái bộ gõ về ban đầu
     public func reset() {
-        // VietnameseEngine hiện tại là stateless context-based,
-        // nhưng hàm này đóng vai trò giao diện chuẩn để xóa sạch bộ đệm ngữ âm
+        lastWasStandaloneW = false
+        didRestoreW = false
+        didRestoreJ = false
+        didRestoreF = false
     }
 }

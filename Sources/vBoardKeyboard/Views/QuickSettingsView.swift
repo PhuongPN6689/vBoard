@@ -27,6 +27,12 @@ public final class QuickSettingsView: UIView {
     private let glideButton = UIButton(type: .system)
     private let suggestionButton = UIButton(type: .system)
 
+    // OpenKey Quick Toggles
+    private let spellingCheckButton = UIButton(type: .system)
+    private let diacriticStyleButton = UIButton(type: .system)
+    private let macroButton = UIButton(type: .system)
+    private let quickTelexButton = UIButton(type: .system)
+
     public override init(frame: CGRect) {
         super.init(frame: frame)
         setupUI()
@@ -149,6 +155,40 @@ public final class QuickSettingsView: UIView {
             self.updateUIState()
             self.delegate?.quickSettingsDidChangeConfiguration(self)
         }
+
+        // Section: OpenKey Bộ gõ & Gõ tắt
+        setupToggleRow(button: spellingCheckButton, labelText: "Kiểm tra chính tả tiếng Việt:") { [weak self] in
+            guard let self = self else { return }
+            vBoardSettings.shared.isSpellingCheckEnabled.toggle()
+            HapticManager.shared.playKeyTap()
+            self.updateUIState()
+            self.delegate?.quickSettingsDidChangeConfiguration(self)
+        }
+
+        setupToggleRow(button: diacriticStyleButton, labelText: "Dấu kiểu mới (òa, úy):") { [weak self] in
+            guard let self = self else { return }
+            let current = vBoardSettings.shared.diacriticStyle
+            vBoardSettings.shared.diacriticStyle = (current == .newStyle) ? .oldStyle : .newStyle
+            HapticManager.shared.playKeyTap()
+            self.updateUIState()
+            self.delegate?.quickSettingsDidChangeConfiguration(self)
+        }
+
+        setupToggleRow(button: macroButton, labelText: "Cho phép gõ tắt (Macro):") { [weak self] in
+            guard let self = self else { return }
+            vBoardSettings.shared.isShortcutExpansionEnabled.toggle()
+            HapticManager.shared.playKeyTap()
+            self.updateUIState()
+            self.delegate?.quickSettingsDidChangeConfiguration(self)
+        }
+
+        setupToggleRow(button: quickTelexButton, labelText: "Gõ nhanh phụ âm (Quick Telex):") { [weak self] in
+            guard let self = self else { return }
+            vBoardSettings.shared.isQuickTelexEnabled.toggle()
+            HapticManager.shared.playKeyTap()
+            self.updateUIState()
+            self.delegate?.quickSettingsDidChangeConfiguration(self)
+        }
     }
 
     private func createSectionLabel(text: String) -> UILabel {
@@ -207,6 +247,10 @@ public final class QuickSettingsView: UIView {
         updateToggleButton(hideGlobeButton, isOn: settings.isGlobeKeyHidden)
         updateToggleButton(glideButton, isOn: settings.isGlideTypingEnabled)
         updateToggleButton(suggestionButton, isOn: settings.isSuggestionBarEnabled)
+        updateToggleButton(spellingCheckButton, isOn: settings.isSpellingCheckEnabled)
+        updateToggleButton(diacriticStyleButton, isOn: settings.diacriticStyle == .newStyle)
+        updateToggleButton(macroButton, isOn: settings.isShortcutExpansionEnabled)
+        updateToggleButton(quickTelexButton, isOn: settings.isQuickTelexEnabled)
     }
 
     private func updateToggleButton(_ btn: UIButton, isOn: Bool) {
@@ -264,6 +308,10 @@ public final class QuickSettingsView: UIView {
 
         curY = layoutToggleRow(button: glideButton, labelText: "Gõ lướt cử chỉ (Glide Typing):", startY: curY, width: contentW)
         curY = layoutToggleRow(button: suggestionButton, labelText: "Thanh gợi ý từ thông minh:", startY: curY, width: contentW)
+        curY = layoutToggleRow(button: spellingCheckButton, labelText: "Kiểm tra chính tả tiếng Việt:", startY: curY, width: contentW)
+        curY = layoutToggleRow(button: diacriticStyleButton, labelText: "Dấu kiểu mới (òa, úy):", startY: curY, width: contentW)
+        curY = layoutToggleRow(button: macroButton, labelText: "Cho phép gõ tắt (Macro):", startY: curY, width: contentW)
+        curY = layoutToggleRow(button: quickTelexButton, labelText: "Gõ nhanh phụ âm (Quick Telex):", startY: curY, width: contentW)
 
         scrollView.contentSize = CGSize(width: contentW, height: curY + 10.0)
     }

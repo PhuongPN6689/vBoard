@@ -118,6 +118,11 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         adapter.engine.isZKeyRemoveToneEnabled = settings.isZKeyRemoveToneEnabled
         adapter.engine.isWAtWordBeginningEnabled = settings.isWAtWordBeginningEnabled
         adapter.engine.isModernToneBalancingEnabled = settings.isModernToneBalancingEnabled
+        adapter.engine.isQuickStartConsonantEnabled = settings.isQuickStartConsonantEnabled
+        adapter.engine.isQuickEndConsonantEnabled = settings.isQuickEndConsonantEnabled
+        adapter.engine.isSpellingCheckEnabled = settings.isSpellingCheckEnabled
+        adapter.engine.isRestoreIfWrongSpellingEnabled = settings.isRestoreIfWrongSpellingEnabled
+        adapter.engine.isAllowConsonantZFWJEnabled = settings.isAllowConsonantZFWJEnabled
 
         let isSecure = textDocumentProxy.isSecureTextEntry ?? false
         let isPassword = (textDocumentProxy.textContentType == .password || textDocumentProxy.textContentType == .newPassword)

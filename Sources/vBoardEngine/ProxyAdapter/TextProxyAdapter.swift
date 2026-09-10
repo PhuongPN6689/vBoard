@@ -71,10 +71,19 @@ public final class TextProxyAdapter {
                 for _ in 0..<currentWord.count {
                     proxy.deleteBackward()
                 }
-                // Giữ nguyên định dạng chữ hoa đầu từ nếu có
+                // Áp dụng quy tắc Auto Caps của OpenKey
                 let finalReplacement: String
-                if currentWord.first?.isUppercase == true {
-                    finalReplacement = replacement.prefix(1).uppercased() + replacement.dropFirst()
+                if vBoardSettings.shared.isAutoCapsMacroEnabled {
+                    let isAllUpper = currentWord.count > 1 && currentWord.allSatisfy { $0.isUppercase }
+                    let isFirstUpper = currentWord.first?.isUppercase == true
+
+                    if isAllUpper {
+                        finalReplacement = replacement.uppercased()
+                    } else if isFirstUpper {
+                        finalReplacement = replacement.prefix(1).uppercased() + replacement.dropFirst()
+                    } else {
+                        finalReplacement = replacement
+                    }
                 } else {
                     finalReplacement = replacement
                 }
