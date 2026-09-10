@@ -6,6 +6,9 @@ struct vBoardApp: App {
     var body: some Scene {
         WindowGroup {
             SettingsDashboardView()
+                .onOpenURL { url in
+                    print("[vBoardApp] Received URL: \(url)")
+                }
         }
     }
 }

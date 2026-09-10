@@ -20,6 +20,87 @@ public final class OpenKeyEngineAdapter: @unchecked Sendable {
         engine.reset()
     }
 
+    /// Trích xuất từ hiện tại (cuối cùng) từ ngữ cảnh trước con trỏ
+    public func extractCurrentWord(from context: String) -> String {
+        guard !context.isEmpty else { return "" }
+        let nfcContext = context.precomposedStringWithCanonicalMapping
+        var word = ""
+        for char in nfcContext.reversed() {
+            if char.isWhitespace || char.isNewline || char.isPunctuation {
+                break
+            }
+            word.insert(char, at: word.startIndex)
+        }
+        return word
+    }
+
+    /// Đồng bộ hoá từ trước con trỏ vào OpenKeyEngine khi phiên gõ mới bắt đầu trên một từ có sẵn
+    public func syncContextWord(_ word: String) {
+        guard engine.isEmpty, !word.isEmpty else { return }
+        let keystrokes = wordToKeystrokes(word, inputType: engine.vInputType)
+        for ch in keystrokes {
+            guard let mapping = OpenKeyVietnameseData.characterToKeyCode(ch) else { continue }
+            engine.handleEvent(
+                event: .keyboard,
+                state: .keyDown,
+                data: mapping.keyCode,
+                capsStatus: mapping.isCaps ? 1 : 0
+            )
+        }
+    }
+
+    /// Phân rã từ tiếng Việt thành chuỗi phím gõ tương ứng của OpenKey
+    private func wordToKeystrokes(_ word: String, inputType: OpenKeyInputType) -> String {
+        var result = ""
+        var tones = ""
+
+        for ch in word {
+            if ch == "đ" {
+                result += (inputType == .vni) ? "d9" : "dd"
+                continue
+            } else if ch == "Đ" {
+                result += (inputType == .vni) ? "D9" : "DD"
+                continue
+            }
+
+            let decomposed = String(ch).decomposedStringWithCanonicalMapping
+            var baseChar: Character? = nil
+
+            for scalar in decomposed.unicodeScalars {
+                switch scalar.value {
+                case 0x0302: // circumflex (mũ: â, ê, ô)
+                    if let base = baseChar {
+                        if inputType == .vni {
+                            result += "6"
+                        } else {
+                            result.append(base)
+                        }
+                    }
+                case 0x0306: // breve (trăng: ă)
+                    result += (inputType == .vni) ? "8" : "w"
+                case 0x031B: // horn (móc: ơ, ư)
+                    result += (inputType == .vni) ? "7" : "w"
+                case 0x0301: // sắc
+                    tones += (inputType == .vni) ? "1" : "s"
+                case 0x0300: // huyền
+                    tones += (inputType == .vni) ? "2" : "f"
+                case 0x0309: // hỏi
+                    tones += (inputType == .vni) ? "3" : "r"
+                case 0x0303: // ngã
+                    tones += (inputType == .vni) ? "4" : "x"
+                case 0x0323: // nặng
+                    tones += (inputType == .vni) ? "5" : "j"
+                default:
+                    if baseChar == nil {
+                        baseChar = Character(scalar)
+                        result.append(Character(scalar))
+                    }
+                }
+            }
+        }
+        return result + tones
+    }
+
     /// Chuyển đổi mã trong charData thành chuỗi ký tự hiển thị
     private func decodeCharData(data: [UInt32], count: Int, isReversed: Bool = true) -> String {
         guard count > 0 else { return "" }

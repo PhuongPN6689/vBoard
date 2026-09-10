@@ -55,7 +55,7 @@ public final class ActionHistoryManager {
 
     /// Thực hiện Hoàn tác (Undo)
     @discardableResult
-    public func undo(proxy: TextDocumentProxyProtocol, engine: VietnameseEngine) -> Bool {
+    public func undo(proxy: TextDocumentProxyProtocol, adapter: OpenKeyEngineAdapter) -> Bool {
         guard let transaction = undoStack.popLast() else { return false }
 
         // Thực thi nghịch đảo (Reverse Mutation)
@@ -87,7 +87,7 @@ public final class ActionHistoryManager {
         }
 
         // Đồng bộ hóa trạng thái OpenKey FSM
-        engine.reset()
+        adapter.reset()
 
         // Đẩy sang Redo stack
         redoStack.append(transaction)
@@ -99,9 +99,52 @@ public final class ActionHistoryManager {
         return true
     }
 
+    /// Hoàn tác tiện ích với OpenKeyEngine trực tiếp
+    @discardableResult
+    public func undo(proxy: TextDocumentProxyProtocol, engine: OpenKeyEngine) -> Bool {
+        guard let transaction = undoStack.popLast() else { return false }
+
+        switch transaction.kind {
+        case .typing(let deletedString, let insertedString):
+            for _ in 0..<insertedString.count {
+                proxy.deleteBackward()
+            }
+            if !deletedString.isEmpty {
+                proxy.insertText(deletedString)
+            }
+
+        case .shortcutExpansion(let originalShortcut, let expandedText):
+            for _ in 0..<expandedText.count {
+                proxy.deleteBackward()
+            }
+            proxy.insertText(originalShortcut)
+
+        case .swipeDelete(let deletedText):
+            proxy.insertText(deletedText)
+
+        case .paste(let pastedText):
+            for _ in 0..<pastedText.count {
+                proxy.deleteBackward()
+            }
+
+        case .backspace(let deletedChar):
+            proxy.insertText(String(deletedChar))
+        }
+
+        engine.reset()
+
+        redoStack.append(transaction)
+        if redoStack.count > maxDepth {
+            redoStack.removeFirst()
+        }
+
+        onHistoryStateChanged?()
+        return true
+    }
+
     /// Thực hiện Làm lại (Redo)
     @discardableResult
-    public func redo(proxy: TextDocumentProxyProtocol, engine: VietnameseEngine) -> Bool {
+    public func redo(proxy: TextDocumentProxyProtocol, adapter: OpenKeyEngineAdapter) -> Bool {
         guard let transaction = redoStack.popLast() else { return false }
 
         // Thực thi áp dụng lại (Forward Mutation)
@@ -133,9 +176,52 @@ public final class ActionHistoryManager {
         }
 
         // Đồng bộ hóa trạng thái OpenKey FSM
-        engine.reset()
+        adapter.reset()
 
         // Đẩy trở lại Undo stack
+        undoStack.append(transaction)
+        if undoStack.count > maxDepth {
+            undoStack.removeFirst()
+        }
+
+        onHistoryStateChanged?()
+        return true
+    }
+
+    /// Làm lại tiện ích với OpenKeyEngine trực tiếp
+    @discardableResult
+    public func redo(proxy: TextDocumentProxyProtocol, engine: OpenKeyEngine) -> Bool {
+        guard let transaction = redoStack.popLast() else { return false }
+
+        switch transaction.kind {
+        case .typing(let deletedString, let insertedString):
+            for _ in 0..<deletedString.count {
+                proxy.deleteBackward()
+            }
+            if !insertedString.isEmpty {
+                proxy.insertText(insertedString)
+            }
+
+        case .shortcutExpansion(let originalShortcut, let expandedText):
+            for _ in 0..<originalShortcut.count {
+                proxy.deleteBackward()
+            }
+            proxy.insertText(expandedText)
+
+        case .swipeDelete(let deletedText):
+            for _ in 0..<deletedText.count {
+                proxy.deleteBackward()
+            }
+
+        case .paste(let pastedText):
+            proxy.insertText(pastedText)
+
+        case .backspace:
+            proxy.deleteBackward()
+        }
+
+        engine.reset()
+
         undoStack.append(transaction)
         if undoStack.count > maxDepth {
             undoStack.removeFirst()

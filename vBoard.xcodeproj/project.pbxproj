@@ -9,14 +9,16 @@
 /* Begin PBXBuildFile section */
 		02B0D070ACA53935C80737B9 /* GlideTrailLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55EFD98CBE74CD44A5AE5BD1 /* GlideTrailLayer.swift */; };
 		0D4717E9681A9300F183DFA8 /* KeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67A073B8A693377D9C5AEE4 /* KeyView.swift */; };
+		1234567890ABCDEF12345678 /* KeyboardIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 876543210FEDCBA987654321 /* KeyboardIcons.swift */; };
 		13F5AE3A41F26FC6B4BA7946 /* VietnameseChar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1095AE1907B9756EAE6A798 /* VietnameseChar.swift */; };
 		14C97F52A4C004F88BCEC687 /* vietnamese_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = 54031EA090E06FCC2065AE18 /* vietnamese_words.txt */; };
 		159F32BC6D6373F58C99D536 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3B3B9E93E12F48561C831E6 /* ClipboardManager.swift */; };
 		190A6EEF1BA5265C74CF1E3C /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF39ADE5DA00FD393B077B1 /* SoundManager.swift */; };
+		1A1A87704B46B3422DF0E5C4 /* OpenKeyMacro.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF9CCEF93E17CFB602C38972 /* OpenKeyMacro.swift */; };
+		1A5596BD7C66776C4F4E05CA /* OpenKeyEngineAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF8B252D7918C041B168B5EB /* OpenKeyEngineAdapter.swift */; };
 		1EC575EDAD558EE84566E47E /* KeyCalloutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8763C9EFAAC9C25762E94D1D /* KeyCalloutView.swift */; };
 		270A3BB594DBD337A293E203 /* libvBoardKeyboard.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0C7C7BB0C25D49AF9FF6696C /* libvBoardKeyboard.a */; };
 		2B5EA0FDA22CC317486FB7B6 /* AtomicTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23FC58E6659E62495744E07 /* AtomicTransaction.swift */; };
-		34CB25CEE5334C8FA2D1193F /* VietnameseSyllable.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D0B46486FB6440C7EBFE5A /* VietnameseSyllable.swift */; };
 		35EEFFE431F97F32617F37F2 /* NextWordPredictor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC237B83783A6239CC304FF2 /* NextWordPredictor.swift */; };
 		390EA79484C88A130B598751 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCDD6B13437C869753848B5B /* KeyboardViewController.swift */; };
 		3CF13CA4515F1EBFC7872058 /* vietnamese_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = 54031EA090E06FCC2065AE18 /* vietnamese_words.txt */; };
@@ -24,6 +26,7 @@
 		453722F38A2FE1C7CCB3A239 /* TextProxyAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5E9594331E9B32F7BAFF43 /* TextProxyAdapter.swift */; };
 		59BDA4A43A0C07AB8A5E40E4 /* KeyboardKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F3A2923C80F779549B302B /* KeyboardKey.swift */; };
 		5CA9F336530CB6A08824A81A /* QuickSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954155E59FC4A8B24BE9AE6B /* QuickSettingsView.swift */; };
+		5DBB07574C5E25E14F363991 /* OpenKeyDataType.swift in Sources */ = {isa = PBXBuildFile; fileRef = F66A763403642FCFA8667E87 /* OpenKeyDataType.swift */; };
 		6014CF4F7C312BDDBF0EAF87 /* EmojiPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C060D3B5B205C481C00A450 /* EmojiPickerView.swift */; };
 		64014152791EDA94E077B765 /* SuggestionBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F3D4C468849C38893BD996 /* SuggestionBarView.swift */; };
 		6D09B1D3C7D2BCB78498B90F /* libvBoardEngine.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 39F17D01C62AC57E04050CEF /* libvBoardEngine.a */; };
@@ -33,17 +36,18 @@
 		874EE098EAAD0305F5BB0879 /* libvBoardKeyboard.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0C7C7BB0C25D49AF9FF6696C /* libvBoardKeyboard.a */; };
 		87BB8408D86EE7A08AC5567F /* InputMethod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E35DB124F67B039EA90E254 /* InputMethod.swift */; };
 		919280A2D832BE81106C1429 /* BackspaceSwipeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C084163A55EB2AC7EDDB25A3 /* BackspaceSwipeHandler.swift */; };
+		922D3D0BAAFE66AE4D868686 /* OpenKeyVietnameseData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643E05483EFA5185ED35847C /* OpenKeyVietnameseData.swift */; };
 		92B4974692F44BF905D89330 /* libvBoardEngine.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 39F17D01C62AC57E04050CEF /* libvBoardEngine.a */; };
 		9ACD8A633FB26DDB14951340 /* ShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF7930F7BC419E1490EA234 /* ShortcutManager.swift */; };
 		B09E29E7E64B8A084515A7D7 /* KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1259EC8F217E436290538454 /* KeyboardView.swift */; };
 		B790EDEA0194173F4993E511 /* vBoardSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A65F844DBB38E9421012DAA /* vBoardSettings.swift */; };
 		B8EFC1FF62DE7B7E776775B0 /* TextToEmojiMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B63B77DF38A4AAC14BF9F64 /* TextToEmojiMapper.swift */; };
 		BA2A97E04CA7F4EE36D42E05 /* TextEditingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BC7A7087E317D314907213D /* TextEditingView.swift */; };
-		BD33A8B0E1AB14CB304819AF /* VietnameseEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEE728E09DF75EBF3074D98 /* VietnameseEngine.swift */; };
 		C32AF92DFE186BD1E3407BF6 /* vBoardKeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2F0E28A44821EB97959A3EE7 /* vBoardKeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		CC46BA75CECD7A514AF10ABA /* vietnamese_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = 54031EA090E06FCC2065AE18 /* vietnamese_words.txt */; };
 		D30DD88279B84594D6277308 /* KeyboardExtensionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3E7A588124E78149AC5D963 /* KeyboardExtensionViewController.swift */; };
 		DE9F3459DEEE54D29FC5C423 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EA1C20F2DB2F16C32B97D9C6 /* Assets.xcassets */; };
+		E03609B1C4AA286A6AB91699 /* OpenKeyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50EB1A5330E7B8B3E0EBB43F /* OpenKeyEngine.swift */; };
 		E8B8DC6EFAC05DA5FA16BA0B /* WordTrie.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4025DAE455D113A6349D31DD /* WordTrie.swift */; };
 /* End PBXBuildFile section */
 
@@ -111,6 +115,7 @@
 		0C7C7BB0C25D49AF9FF6696C /* libvBoardKeyboard.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libvBoardKeyboard.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		11940CD271D0ACF17923C2E1 /* SpaceCursorHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceCursorHandler.swift; sourceTree = "<group>"; };
 		1259EC8F217E436290538454 /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
+		876543210FEDCBA987654321 /* KeyboardIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardIcons.swift; sourceTree = "<group>"; };
 		1BC7A7087E317D314907213D /* TextEditingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextEditingView.swift; sourceTree = "<group>"; };
 		1F0EEA0DA51BBC012A6BB3D4 /* vBoardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vBoardApp.swift; sourceTree = "<group>"; };
 		2B63B77DF38A4AAC14BF9F64 /* TextToEmojiMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToEmojiMapper.swift; sourceTree = "<group>"; };
@@ -120,10 +125,12 @@
 		4025DAE455D113A6349D31DD /* WordTrie.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordTrie.swift; sourceTree = "<group>"; };
 		48F3D4C468849C38893BD996 /* SuggestionBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionBarView.swift; sourceTree = "<group>"; };
 		4E35DB124F67B039EA90E254 /* InputMethod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputMethod.swift; sourceTree = "<group>"; };
+		50EB1A5330E7B8B3E0EBB43F /* OpenKeyEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenKeyEngine.swift; sourceTree = "<group>"; };
 		54031EA090E06FCC2065AE18 /* vietnamese_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = vietnamese_words.txt; sourceTree = "<group>"; };
 		55EFD98CBE74CD44A5AE5BD1 /* GlideTrailLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlideTrailLayer.swift; sourceTree = "<group>"; };
 		60FF81AF3E7506B63D00934D /* vBoard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = vBoard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		61DDDE42F4CBB3888296C9DF /* ClipboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardView.swift; sourceTree = "<group>"; };
+		643E05483EFA5185ED35847C /* OpenKeyVietnameseData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenKeyVietnameseData.swift; sourceTree = "<group>"; };
 		7A65F844DBB38E9421012DAA /* vBoardSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vBoardSettings.swift; sourceTree = "<group>"; };
 		8763C9EFAAC9C25762E94D1D /* KeyCalloutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCalloutView.swift; sourceTree = "<group>"; };
 		954155E59FC4A8B24BE9AE6B /* QuickSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSettingsView.swift; sourceTree = "<group>"; };
@@ -133,18 +140,19 @@
 		B1095AE1907B9756EAE6A798 /* VietnameseChar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VietnameseChar.swift; sourceTree = "<group>"; };
 		B23FC58E6659E62495744E07 /* AtomicTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicTransaction.swift; sourceTree = "<group>"; };
 		B3E7A588124E78149AC5D963 /* KeyboardExtensionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardExtensionViewController.swift; sourceTree = "<group>"; };
-		BEEE728E09DF75EBF3074D98 /* VietnameseEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VietnameseEngine.swift; sourceTree = "<group>"; };
+		BF8B252D7918C041B168B5EB /* OpenKeyEngineAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenKeyEngineAdapter.swift; sourceTree = "<group>"; };
 		C084163A55EB2AC7EDDB25A3 /* BackspaceSwipeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackspaceSwipeHandler.swift; sourceTree = "<group>"; };
 		CC237B83783A6239CC304FF2 /* NextWordPredictor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextWordPredictor.swift; sourceTree = "<group>"; };
 		CCDD6B13437C869753848B5B /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
 		D3B3B9E93E12F48561C831E6 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
-		D4D0B46486FB6440C7EBFE5A /* VietnameseSyllable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VietnameseSyllable.swift; sourceTree = "<group>"; };
 		E8C667F564086E046141CE20 /* vBoard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = vBoard.entitlements; sourceTree = "<group>"; };
 		EA1C20F2DB2F16C32B97D9C6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EAF7930F7BC419E1490EA234 /* ShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutManager.swift; sourceTree = "<group>"; };
 		ED5E9594331E9B32F7BAFF43 /* TextProxyAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextProxyAdapter.swift; sourceTree = "<group>"; };
 		ED6A1AFDA3DEB8B6DCC49811 /* vBoardKeyboardExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = vBoardKeyboardExtension.entitlements; sourceTree = "<group>"; };
+		EF9CCEF93E17CFB602C38972 /* OpenKeyMacro.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenKeyMacro.swift; sourceTree = "<group>"; };
 		F3F3A2923C80F779549B302B /* KeyboardKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardKey.swift; sourceTree = "<group>"; };
+		F66A763403642FCFA8667E87 /* OpenKeyDataType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenKeyDataType.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -255,6 +263,7 @@
 				7D27A0585965F4194C9F1C9A /* Core */,
 				0CA38FC249F6DC46C5742550 /* Dictionary */,
 				85BC69B926A17C04A7F31A10 /* Models */,
+				BAB5FC555B0C0B55857F14E5 /* OpenKey */,
 				C346E21FCA462522E9378F36 /* ProxyAdapter */,
 				50C757EC3710DFB68FBD14DE /* Resources */,
 				7E62DA984B95633DD53BA1C5 /* Shortcuts */,
@@ -267,8 +276,6 @@
 			isa = PBXGroup;
 			children = (
 				B23FC58E6659E62495744E07 /* AtomicTransaction.swift */,
-				BEEE728E09DF75EBF3074D98 /* VietnameseEngine.swift */,
-				D4D0B46486FB6440C7EBFE5A /* VietnameseSyllable.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -299,12 +306,25 @@
 				55EFD98CBE74CD44A5AE5BD1 /* GlideTrailLayer.swift */,
 				1259EC8F217E436290538454 /* KeyboardView.swift */,
 				8763C9EFAAC9C25762E94D1D /* KeyCalloutView.swift */,
+				876543210FEDCBA987654321 /* KeyboardIcons.swift */,
 				A67A073B8A693377D9C5AEE4 /* KeyView.swift */,
 				954155E59FC4A8B24BE9AE6B /* QuickSettingsView.swift */,
 				48F3D4C468849C38893BD996 /* SuggestionBarView.swift */,
 				1BC7A7087E317D314907213D /* TextEditingView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		BAB5FC555B0C0B55857F14E5 /* OpenKey */ = {
+			isa = PBXGroup;
+			children = (
+				F66A763403642FCFA8667E87 /* OpenKeyDataType.swift */,
+				50EB1A5330E7B8B3E0EBB43F /* OpenKeyEngine.swift */,
+				BF8B252D7918C041B168B5EB /* OpenKeyEngineAdapter.swift */,
+				EF9CCEF93E17CFB602C38972 /* OpenKeyMacro.swift */,
+				643E05483EFA5185ED35847C /* OpenKeyVietnameseData.swift */,
+			);
+			path = OpenKey;
 			sourceTree = "<group>";
 		};
 		C346E21FCA462522E9378F36 /* ProxyAdapter */ = {
@@ -557,6 +577,7 @@
 				02B0D070ACA53935C80737B9 /* GlideTrailLayer.swift in Sources */,
 				7F324D8D32BB48E26C91FECE /* HapticManager.swift in Sources */,
 				1EC575EDAD558EE84566E47E /* KeyCalloutView.swift in Sources */,
+				1234567890ABCDEF12345678 /* KeyboardIcons.swift in Sources */,
 				0D4717E9681A9300F183DFA8 /* KeyView.swift in Sources */,
 				59BDA4A43A0C07AB8A5E40E4 /* KeyboardKey.swift in Sources */,
 				B09E29E7E64B8A084515A7D7 /* KeyboardView.swift in Sources */,
@@ -585,12 +606,15 @@
 				159F32BC6D6373F58C99D536 /* ClipboardManager.swift in Sources */,
 				87BB8408D86EE7A08AC5567F /* InputMethod.swift in Sources */,
 				35EEFFE431F97F32617F37F2 /* NextWordPredictor.swift in Sources */,
+				5DBB07574C5E25E14F363991 /* OpenKeyDataType.swift in Sources */,
+				E03609B1C4AA286A6AB91699 /* OpenKeyEngine.swift in Sources */,
+				1A5596BD7C66776C4F4E05CA /* OpenKeyEngineAdapter.swift in Sources */,
+				1A1A87704B46B3422DF0E5C4 /* OpenKeyMacro.swift in Sources */,
+				922D3D0BAAFE66AE4D868686 /* OpenKeyVietnameseData.swift in Sources */,
 				9ACD8A633FB26DDB14951340 /* ShortcutManager.swift in Sources */,
 				453722F38A2FE1C7CCB3A239 /* TextProxyAdapter.swift in Sources */,
 				B8EFC1FF62DE7B7E776775B0 /* TextToEmojiMapper.swift in Sources */,
 				13F5AE3A41F26FC6B4BA7946 /* VietnameseChar.swift in Sources */,
-				BD33A8B0E1AB14CB304819AF /* VietnameseEngine.swift in Sources */,
-				34CB25CEE5334C8FA2D1193F /* VietnameseSyllable.swift in Sources */,
 				E8B8DC6EFAC05DA5FA16BA0B /* WordTrie.swift in Sources */,
 				B790EDEA0194173F4993E511 /* vBoardSettings.swift in Sources */,
 			);
@@ -787,6 +811,14 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = 98V2LUGJ92;
 				INFOPLIST_KEY_CFBundleDisplayName = vBoard;
+				INFOPLIST_KEY_CFBundleURLTypes = (
+					{
+						CFBundleURLName = "com.nguyenphuong.vBoard";
+						CFBundleURLSchemes = (
+							vboard,
+						);
+					},
+				);
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -811,6 +843,14 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = 98V2LUGJ92;
 				INFOPLIST_KEY_CFBundleDisplayName = vBoard;
+				INFOPLIST_KEY_CFBundleURLTypes = (
+					{
+						CFBundleURLName = "com.nguyenphuong.vBoard";
+						CFBundleURLSchemes = (
+							vboard,
+						);
+					},
+				);
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (

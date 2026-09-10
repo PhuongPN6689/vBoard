@@ -136,7 +136,9 @@ Thu hẹp bề ngang bàn phím dạt sang cạnh trái hoặc phải màn hình
   - **Nút Đảo chiều (Swap Side):** Icon `arrow.left.and.right` / `chevron.left` hoặc `chevron.right` để lập tức chuyển bàn phím sang tay đối diện.
   - **Nút Thoát một tay (Expand):** Icon `arrow.up.left.and.arrow.down.right` để đưa bàn phím trở lại chế độ toàn màn hình 100%.
   - **Nút Đổi vị trí (Position/Settings):** Mở nhanh tùy chọn vị trí.
-- **Lưu cấu hình:** Lưu trạng thái vào `vBoardSettings.oneHandedMode` (`enum OneHandedMode: String { case off, left, right }`).
+- **Lưu cấu hình & Ghi nhớ vị trí trước đó (Side Memory):**
+  - Lưu trạng thái vào `vBoardSettings.oneHandedMode` (`enum OneHandedMode: String { case off, left, right }`).
+  - Lưu trạng thái bên đã dùng gần nhất vào `vBoardSettings.lastOneHandedSide` (mặc định `.right`). Khi bật chế độ một tay từ trạng thái `.off`, bàn phím sẽ tự động khôi phục đúng hướng trước đó (lệch trái hoặc lệch phải) thay vì ép buộc luôn lệch phải.
 
 ```
 [ Chế độ Một tay phải - Cột điều khiển nằm bên trái ]
@@ -180,8 +182,41 @@ Người dùng có thể bật/tắt và tự kéo thả sắp xếp thứ tự 
   [ ≡ ]  [ Cài đặt nhanh (Quick Settings)] [ BẬT ]
   [ ≡ ]  [ Chế độ một tay (One-Handed) ]   [ TẮT ]
   ```
-- Lưu mảng định danh: `vBoardSettings.toolbarItemsOrder: [String]`.
+- Lưu mảng định danh: `vBoardSettings.toolbarItemsOrder: [String]`. Mặc định tinh gọn gồm `["dev", "undoRedo", "quickSettings", "oneHanded"]` (loại bỏ nút Bảng tạm riêng lẻ do đã tích hợp vào phím Paste).
 - Đồng bộ Darwin IPC: `SuggestionBarView` lập tức render lại thứ tự icon theo cấu hình mới.
+
+---
+
+### 3.1. Phím Dán (Paste) Đa Năng Tích Hợp Lịch Sử Bảng Tạm
+
+#### Mục tiêu UX:
+Tận dụng vị trí thuận tiện nhất của ngón tay (mạn phải thanh Toolbar) để phục vụ cả 2 nhu cầu: dán nhanh tức thì và xem lịch sử sao chép mà không chiếm 2 nút riêng biệt.
+
+#### Thiết kế chi tiết:
+- **Trạng thái `"paste"` (Mặc định):**
+  - Icon: Kẹp tài liệu dán văn bản (`KeyboardIcons.pasteIcon`).
+  - Hành động Chạm (Tap): Đọc văn bản từ `UIPasteboard.general` và chèn trực tiếp vào văn bản. Rung nhẹ `HapticManager.shared.playKeyTap()`. Nếu clipboard trống, tự động mở `ClipboardView`.
+- **Trạng thái `"clipboard"` (Lịch sử copy):**
+  - Icon: 2 trang tài liệu xếp chồng (`KeyboardIcons.clipboardHistoryIcon`).
+  - Hành động Chạm (Tap): Mở giao diện `ClipboardView` hiển thị danh sách toàn bộ các đoạn văn bản đã sao chép.
+- **Cử chỉ Nhấn giữ (Long Press 350ms):**
+  - Chuyển đổi qua lại giữa 2 chế độ `"paste"` và `"clipboard"`.
+  - Phản hồi xúc giác `HapticManager.shared.playSpecialKey()` và cập nhật icon vector tức thì.
+  - Lưu trạng thái vào `vBoardSettings.pasteButtonMode`.
+
+---
+
+### 3.2. Tích Hợp Phím Phẩy (`,`) & Vector Callout Mở App Cài Đặt
+
+#### Mục tiêu UX:
+Loại bỏ các phím chức năng chiếm diện tích ở hàng đáy (phím quả cầu 🌐 và phím mặt cười ☺ riêng biệt), mở rộng không gian cho phím cách (Spacebar), đồng thời biến phím Phẩy thành trung tâm điều hướng tiện ích.
+
+#### Thiết kế chi tiết:
+- **Nhãn phụ góc trên phải:** Hiển thị icon vector mặt cười `KeyboardIcons.emojiSmileIcon` thuần `UIBezierPath` (thay vì chữ Unicode `"☺"`).
+- **Cử chỉ Chạm (Tap):** Gõ dấu phẩy `,`.
+- **Cử chỉ Nhấn giữ (Long Press):** Hiển thị bong bóng tinh gọn gồm 2 mục vector:
+  1. **`☺` (Emoji Picker):** Mở bảng chọn biểu tượng cảm xúc Emoji ngay trên bàn phím.
+  2. **`⚙️` (Cài đặt):** Mở ứng dụng Cài đặt chính vBoard qua URL Scheme `vboard://settings` (`extensionContext?.open(url)`). Nếu người dùng chưa bật "Cho phép Toàn quyền" (Allow Full Access) trong Cài đặt iOS, hệ thống tự động kích hoạt chế độ **Graceful Fallback** mở bảng `QuickSettingsView` nội bộ ngay trong bàn phím.
 
 ---
 
@@ -507,6 +542,25 @@ Chuyển đổi hoàn chỉnh cỗ máy gõ tiếng Việt OpenKey (tác giả M
    - Kết nối với kiến trúc `EngineAction` (`deleteCount`, `textToInsert`) của iOS `UITextDocumentProxy`.
    - Tương thích 100% với chu trình gõ tuần tự và hỗ trợ hoàn tác nguyên tử.
 
+6. **Hợp nhất Toàn diện Lõi OpenKey Pure Swift:**
+   - Loại bỏ hoàn toàn các file bộ gõ tự dựng sơ sài (`VietnameseEngine.swift`, `VietnameseSyllable.swift`).
+   - `KeyboardViewController` kết nối trực tiếp và nhất quán duy nhất với `OpenKeyEngineAdapter`.
+
+7. **Chuẩn hóa Phong cách Đặt dấu (Diacritic Style):**
+   - Ánh xạ chính xác giữa thiết lập `diacriticStyle` và cờ `vUseModernOrthography` của OpenKey:
+     - Chuẩn Mới (`.newStyle`): `vUseModernOrthography = 0` $\to$ `hòa`, `khỏe`, `thủy`, `toán`.
+     - Chuẩn Cũ (`.oldStyle`): `vUseModernOrthography = 1` $\to$ `hoà`, `khoẻ`, `thuỷ`, `toán`.
+
+8. **Gợi ý Từ Mềm Không Dấu (Soft Suggestions - Diacritic-Agnostic):**
+   - Khắc phục giới hạn của so khớp tiền tố cứng. Khi người dùng đang gõ `nhu`, hệ thống gợi ý mềm các từ có dấu liên quan: `["nhu", "những", "như", "nhưng", "nhử"]`.
+   - Cơ chế bảng tra `normalizedMap` trên `WordTrie` duy trì tốc độ gợi ý tức thì < 0.03ms.
+
+9. **Bộ phím tắt tốc độ cao OpenKey:**
+   - Gõ tắt phụ âm đầu: `f -> ph`, `j -> gi`, `w -> qu` (`fair -> phải`, `jair -> giải`, `wa -> qua`).
+   - Gõ tắt phụ âm cuối: `g -> ng`, `h -> nh`, `k -> ch` (`tog -> tong`, `tih -> tinh`, `tik -> tich`).
+   - Phím `z` gỡ dấu thanh, phím ngoặc vuông `[` $\to$ `ơ`, `]` $\to$ `ư`, `[[` $\to$ `[`, `]]` $\to$ `]`.
+   - Khắc phục lỗi `moiws` ra `mới` và cấu hình mặc định `isQuickTelexEnabled = false` giúp gõ `viettel` chuẩn xác.
+
 ---
 
 ## PHẦN 3: BẢNG THEO DÕI & LỘ TRÌNH TRIỂN KHAI
@@ -519,5 +573,6 @@ Chuyển đổi hoàn chỉnh cỗ máy gõ tiếng Việt OpenKey (tác giả M
 | **Sprint 4** | - Bảng dự đoán từ tiếp theo (Bi-gram table) & Text-to-Emoji.<br>- Vuốt phím xuống nhập ký hiệu (Flick-down).<br>- Âm thanh gõ phím & Smart Quick Chip trên toolbar. | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 18/18 Tests)* |
 | **Sprint 5** | - Bộ Full Themes màu sắc, Theme Gradient vector & Bật/Tắt viền phím.<br>- Tinh chỉnh thuật toán Glide tiếng Việt & Font/Font size slider.<br>- Kiểm tra và kết nối thông suốt 100% các tính năng runtime. | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 18/18 Tests)* |
 | **Sprint 6** | - Chuyển đổi 1-1 mã nguồn C++ lõi OpenKey (Mai Vũ Tuyên) sang Swift thuần.<br>- Hiện thực hóa `OpenKeyDataType`, `OpenKeyVietnameseData`, `OpenKeyEngine`, `OpenKeyMacro`, `OpenKeyEngineAdapter`.<br>- Kiểm định độc lập, phát hiện và khắc phục 4 lỗi cốt tử: vô hiệu hóa `checkGrammar` do `vFreeMark=1`, kích hoạt nhầm Quick Telex do `vQuickTelex=1`, lỗi Bitmask `handleModernMark` và đảo ngược quy ước dấu mới/cũ.<br>- Xây dựng bộ kiểm thử tự động mở rộng `OpenKeyEngineTests` (31 bài test đo hiệu năng & độ chính xác âm tiết thực tế). | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 31/31 Tests)* |
+| **Sprint 7** | - Xóa bỏ hoàn toàn mã cũ tự dựng (`VietnameseEngine.swift`, `VietnameseSyllable.swift`), thống nhất 100% bàn phím vào OpenKey pure Swift.<br>- Bổ sung gợi ý từ mềm không dấu (`suggestSoft`).<br>- Hoàn thiện ma trận phụ âm đầu (`f, j, w`) và phụ âm cuối (`g, h, k`).<br>- Xây dựng `ConfigurationMatrixTests.swift` kiểm định giá trị mặc định và ma trận hoán vị mọi cấu hình.<br>- Nâng cấp bộ test lên 6 Test Suites, 69 Tests, > 2000 hoán vị âm tiết, vượt qua 100%. | ✅ **Đã hoàn thành 100%**<br>*(Đạt chuẩn 69/69 Tests)* |
 
 

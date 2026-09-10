@@ -47,9 +47,9 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
     open override func viewDidLoad() {
         super.viewDidLoad()
 
-        // Khởi tạo Engine và Adapter
-        let engine = VietnameseEngine(inputMethod: .telex, diacriticStyle: .newStyle)
-        adapter = TextProxyAdapter(engine: engine)
+        // Khởi tạo Engine và Adapter OpenKey
+        let openKeyAdapter = OpenKeyEngineAdapter()
+        adapter = TextProxyAdapter(adapter: openKeyAdapter)
         proxyWrapper = NativeTextProxyWrapper(proxy: textDocumentProxy)
 
         // Khởi tạo KeyboardView
@@ -111,18 +111,29 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
 
     public func applyLatestSettings() {
         let settings = vBoardSettings.shared
-        adapter.engine.inputMethod = settings.inputMethod
-        adapter.engine.diacriticStyle = settings.diacriticStyle
-        adapter.engine.isQuickTelexEnabled = settings.isQuickTelexEnabled
+        switch settings.inputMethod {
+        case .telex:
+            adapter.engine.vInputType = .telex
+        case .vni:
+            adapter.engine.vInputType = .vni
+        case .simpleTelex:
+            adapter.engine.vInputType = .simpleTelex1
+        }
+        adapter.engine.vUseModernOrthography = (settings.diacriticStyle == .newStyle) ? 1 : 0
+        adapter.engine.vQuickTelex = settings.isQuickTelexEnabled ? 1 : 0
+        adapter.engine.vQuickStartConsonant = settings.isQuickStartConsonantEnabled ? 1 : 0
+        adapter.engine.vQuickEndConsonant = settings.isQuickEndConsonantEnabled ? 1 : 0
+        adapter.engine.vCheckSpelling = settings.isSpellingCheckEnabled ? 1 : 0
+        adapter.engine.vRestoreIfWrongSpelling = settings.isRestoreIfWrongSpellingEnabled ? 1 : 0
+        adapter.engine.vAllowConsonantZFWJ = settings.isAllowConsonantZFWJEnabled ? 1 : 0
+        adapter.engine.vUseMacro = settings.isShortcutExpansionEnabled ? 1 : 0
+        adapter.engine.vAutoCapsMacro = settings.isAutoCapsMacroEnabled ? 1 : 0
+        adapter.engine.vFixRecommendBrowser = settings.isFixBrowserSuggestionEnabled ? 1 : 0
         adapter.engine.isBracketShortcutsEnabled = settings.isBracketShortcutsEnabled
         adapter.engine.isZKeyRemoveToneEnabled = settings.isZKeyRemoveToneEnabled
         adapter.engine.isWAtWordBeginningEnabled = settings.isWAtWordBeginningEnabled
+        adapter.engine.isAutoUndoEnabled = settings.isAutoUndoEnabled
         adapter.engine.isModernToneBalancingEnabled = settings.isModernToneBalancingEnabled
-        adapter.engine.isQuickStartConsonantEnabled = settings.isQuickStartConsonantEnabled
-        adapter.engine.isQuickEndConsonantEnabled = settings.isQuickEndConsonantEnabled
-        adapter.engine.isSpellingCheckEnabled = settings.isSpellingCheckEnabled
-        adapter.engine.isRestoreIfWrongSpellingEnabled = settings.isRestoreIfWrongSpellingEnabled
-        adapter.engine.isAllowConsonantZFWJEnabled = settings.isAllowConsonantZFWJEnabled
 
         let isSecure = textDocumentProxy.isSecureTextEntry ?? false
         let isPassword = (textDocumentProxy.textContentType == .password || textDocumentProxy.textContentType == .newPassword)
@@ -151,6 +162,8 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         } else {
             heightConstraint?.constant = calculatedHeight
         }
+
+        keyboardView.suggestionBar.updatePasteButtonIcon()
 
         view.setNeedsLayout()
         view.layoutIfNeeded()
@@ -208,11 +221,11 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
 
     private func updateWordSuggestions() {
         guard vBoardSettings.shared.isSuggestionBarEnabled, !keyboardView.isNumberPadActive else { return }
-        let currentWord = adapter.engine.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
+        let currentWord = adapter.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
         if currentWord.isEmpty {
             var predictions: [String] = []
             let trimmed = (proxyWrapper.documentContextBeforeInput ?? "").trimmingCharacters(in: .whitespaces)
-            let lastWord = adapter.engine.extractCurrentWord(from: trimmed)
+            let lastWord = adapter.extractCurrentWord(from: trimmed)
 
             if !lastWord.isEmpty {
                 if vBoardSettings.shared.isNextWordPredictionEnabled {
@@ -351,7 +364,7 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
     }
 
     public func keyboardView(_ keyboardView: KeyboardView, didGlideWord word: String) {
-        let currentWord = adapter.engine.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
+        let currentWord = adapter.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
         for _ in 0..<currentWord.count {
             proxyWrapper.deleteBackward()
         }
@@ -377,7 +390,7 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
     // MARK: - SuggestionBarViewDelegate
 
     public func suggestionBar(_ bar: SuggestionBarView, didSelectWord word: String) {
-        let currentWord = adapter.engine.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
+        let currentWord = adapter.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
         for _ in 0..<currentWord.count {
             proxyWrapper.deleteBackward()
         }
@@ -428,9 +441,20 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
 
     public func suggestionBarDidTapOneHanded(_ bar: SuggestionBarView) {
         let cur = vBoardSettings.shared.oneHandedMode
-        vBoardSettings.shared.oneHandedMode = (cur == .off) ? .right : .off
+        vBoardSettings.shared.oneHandedMode = (cur == .off) ? vBoardSettings.shared.lastOneHandedSide : .off
         vBoardSettings.shared.notifySettingsChanged()
         applyLatestSettings()
+    }
+
+    public func suggestionBarDidTapPaste(_ bar: SuggestionBarView) {
+        if UIPasteboard.general.hasStrings, let text = UIPasteboard.general.string, !text.isEmpty {
+            HapticManager.shared.playKeyTap()
+            proxyWrapper.insertText(text)
+            updateWordSuggestions()
+            checkAutoCapitalization()
+        } else {
+            keyboardView.showClipboardView(delegate: self)
+        }
     }
 
     private func checkAutoCapitalization() {
@@ -463,9 +487,46 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         keyboardView.quickSettingsView?.updateUIState()
     }
 
-    // MARK: - KeyboardViewDelegate - Emoji
+    // MARK: - KeyboardViewDelegate - Emoji & Settings App
     public func keyboardViewDidRequestEmojiPicker(_ keyboardView: KeyboardView) {
         keyboardView.showEmojiPickerView(delegate: self)
+    }
+
+    public func keyboardViewDidOpenSettingsApp(_ keyboardView: KeyboardView) {
+        guard let url = URL(string: "vboard://settings") else { return }
+        
+        if let context = extensionContext {
+            context.open(url) { [weak self] success in
+                if !success {
+                    DispatchQueue.main.async {
+                        self?.fallbackOpenSettings()
+                    }
+                }
+            }
+            return
+        }
+        fallbackOpenSettings()
+    }
+
+    private func fallbackOpenSettings() {
+        guard let url = URL(string: "vboard://settings") else { return }
+        
+        var responder: UIResponder? = self
+        let selWithHandler = sel_registerName("openURL:completionHandler:")
+        let selSingle = sel_registerName("openURL:")
+        while let r = responder {
+            if r.responds(to: selWithHandler) {
+                r.perform(selWithHandler, with: url, with: nil)
+                return
+            } else if r.responds(to: selSingle) {
+                r.perform(selSingle, with: url)
+                return
+            }
+            responder = r.next
+        }
+        
+        // Mở QuickSettings nội bộ nếu hệ thống iOS chặn mở ứng dụng ngoài (chưa bật Allow Full Access)
+        keyboardView.showQuickSettingsView(delegate: self)
     }
 
     // MARK: - EmojiPickerViewDelegate

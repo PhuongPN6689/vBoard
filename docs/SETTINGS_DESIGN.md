@@ -135,11 +135,23 @@ Màn hình trung tâm dạng danh mục thẻ bo tròn (Inset Grouped Form), tí
    - Điều khiển: `Toggle (Mặc định: Bật)`.
    - Mô tả: Phím tắt chuẩn OpenKey: `[` $\to$ `ơ`, `]` $\to$ `ư`, `{` $\to$ `Ơ`, `}` $\to$ `Ư`.
 6. **Quick Telex (Gõ tắt phụ âm kép):**
-   - Điều khiển: `Toggle (Mặc định: Bật)`.
-   - Mô tả: Gõ `cc` $\to$ `ch`, `gg` $\to$ `gi`, `kk` $\to$ `kh`, `nn` $\to$ `ng`, `qq` $\to$ `qu`, `pp` $\to$ `ph`, `tt` $\to$ `th`.
-7. **Tự động hoàn tác khi gõ đúp phím dấu (Auto Undo):**
-   - Điều khiển: `Toggle (Mặc định: Bật)`.
+   - Điều khiển: `Toggle (Mặc định: TẮT)`.
+   - Mô tả: Mặc định tắt để gõ các từ như `viettel`, `camera` không bị đổi sai phụ âm kép. Khi bật: `cc` $\to$ `ch`, `gg` $\to$ `gi`, `kk` $\to$ `kh`, `nn` $\to$ `ng`, `qq` $\to$ `qu`, `pp` $\to$ `ph`, `tt` $\to$ `th`.
+7. **Gõ tắt phụ âm đầu (`f, j, w`):**
+   - Điều khiển: `Toggle (Mặc định: TẮT)`.
+   - Mô tả: Gõ `f` $\to$ `ph`, `j` $\to$ `gi`, `w` $\to$ `qu` (`fair` $\to$ `phải`, `jair` $\to$ `giải`, `wa` $\to$ `qua`).
+8. **Gõ tắt phụ âm cuối (`g, h, k`):**
+   - Điều khiển: `Toggle (Mặc định: TẮT)`.
+   - Mô tả: Gõ `g` $\to$ `ng`, `h` $\to$ `nh`, `k` $\to$ `ch` (`tog` $\to$ `tong`, `tih` $\to$ `tinh`, `tik` $\to$ `tich`).
+9. **Tự động hoàn tác khi gõ đúp phím dấu (Auto Undo):**
+   - Điều khiển: `Toggle (Mặc định: BẬT)`.
    - Mô tả: Ví dụ gõ `aa` $\to$ `â`, nếu gõ thêm `a` nữa sẽ hoàn tác thành `aa`.
+10. **Kiểm tra chính tả (Spelling Check):**
+    - Điều khiển: `Toggle (Mặc định: BẬT)`.
+    - Mô tả: Ngăn chặn các tổ hợp âm tiết không tồn tại trong tiếng Việt theo luật OpenKey.
+11. **Sửa gợi ý URL trình duyệt (Fix Browser Suggestion):**
+    - Điều khiển: `Toggle (Mặc định: BẬT)`.
+    - Mô tả: Không tự động bỏ dấu khi con trỏ đang nhập URL hoặc thanh tìm kiếm web.
 
 ---
 
@@ -256,46 +268,68 @@ public final class vBoardSettings: @unchecked Sendable {
     public static let shared = vBoardSettings()
     
     // Bố cục & Kích thước
-    public var keyboardHeightScale: KeyboardHeightScale // verySmall, small, medium, large, veryLarge
-    public var isNumberRowEnabled: Bool                 // Hàng phím số trên cùng
-    public var isHintSymbolsEnabled: Bool               // Ký tự phụ góc phải
-    public var isGlobeKeyHidden: Bool                   // Ẩn nút quả cầu
-    public var isAutoNumberPadEnabled: Bool             // Tự mở NumPad khi nhập OTP
+    public var keyboardHeightScale: KeyboardHeightScale // medium (100% - Mặc định)
+    public var isNumberRowEnabled: Bool                 // false (Mặc định)
+    public var isHintSymbolsEnabled: Bool               // true (Mặc định)
+    public var isGlobeKeyHidden: Bool                   // false (Mặc định)
+    public var isAutoNumberPadEnabled: Bool             // true (Mặc định)
+    public var isKeyBorderEnabled: Bool                 // true (Mặc định)
     
     // Bộ gõ OpenKey
-    public var inputMethod: InputMethod                 // telex, vni, simpleTelex
-    public var diacriticStyle: DiacriticStyle           // newStyle, classicStyle
-    public var isQuickTelexEnabled: Bool                // cc->ch, gg->gi...
-    public var isBracketShortcutsEnabled: Bool          // [ -> ơ, ] -> ư
-    public var isZKeyRemoveToneEnabled: Bool            // phím z gỡ dấu
-    public var isWAtWordBeginningEnabled: Bool          // w đầu từ thành ư
-    public var isModernToneBalancingEnabled: Bool       // hóa vs hoá
-    public var isAutoUndoEnabled: Bool                  // hoàn tác phím lặp
+    public var inputMethod: InputMethod                 // .telex (Mặc định)
+    public var diacriticStyle: DiacriticStyle           // .newStyle (òa, úy, hòa, thủy - Mặc định)
+    public var isSpellingCheckEnabled: Bool             // true (Mặc định BẬT)
+    public var isRestoreIfWrongSpellingEnabled: Bool    // false (Mặc định TẮT)
+    public var isFixBrowserSuggestionEnabled: Bool      // true (Mặc định BẬT)
+    public var isQuickTelexEnabled: Bool                // false (Mặc định TẮT chuẩn OpenKey, tránh lỗi viettel)
+    public var isQuickStartConsonantEnabled: Bool       // false (f->ph, j->gi, w->qu - Mặc định TẮT)
+    public var isQuickEndConsonantEnabled: Bool         // false (g->ng, h->nh, k->ch - Mặc định TẮT)
+    public var isAllowConsonantZFWJEnabled: Bool        // false (Mặc định TẮT)
+    public var isBracketShortcutsEnabled: Bool          // true ([ -> ơ, ] -> ư - Mặc định BẬT)
+    public var isZKeyRemoveToneEnabled: Bool            // true (phím z gỡ dấu - Mặc định BẬT)
+    public var isWAtWordBeginningEnabled: Bool          // true (w đầu từ thành ư - Mặc định BẬT)
+    public var isAutoUndoEnabled: Bool                  // true (hoàn tác phím lặp - Mặc định BẬT)
+    public var isSmartSwitchModeEnabled: Bool           // true (chuyển đổi thông minh - Mặc định BẬT)
+    
+    // Gõ tắt & Macro
+    public var isShortcutExpansionEnabled: Bool         // true (Mặc định BẬT)
+    public var isAutoCapsMacroEnabled: Bool             // true (Mặc định BẬT)
+    public var isMacroEvenWhenOffEnabled: Bool          // false (Mặc định TẮT)
     
     // Developer Keyboard Mode
-    public var isDeveloperModeButtonEnabled: Bool       // Nút </> trên Toolbar
-    public var developerTabBehavior: DevTabBehavior     // tabChar, twoSpaces, fourSpaces
-    public var isPairAutoCompleteEnabled: Bool          // Tự đóng ngoặc {}, []
+    public var isDeveloperModeButtonEnabled: Bool       // false (Mặc định)
+    public var developerTabBehavior: DevTabBehavior     // fourSpaces (Mặc định)
+    public var isPairAutoCompleteEnabled: Bool          // true (Mặc định)
     
     // Cử chỉ & Phản hồi
-    public var isHapticEnabled: Bool                    // Rung xúc giác Taptic
-    public var hapticIntensity: HapticIntensity         // light, medium, heavy
-    public var isKeyPreviewEnabled: Bool                // Bong bóng phóng to phím
-    public var isSpaceCursorTrackpadEnabled: Bool       // Lướt Space di chuyển con trỏ
-    public var isSwipeToDeleteEnabled: Bool             // Vuốt Backspace xóa từ
-    public var isSpaceDoubleTapPeriodEnabled: Bool      // Bấm đúp Space thành chấm
-    public var longPressDelayMs: Int                    // Độ trễ nhấn giữ (250ms)
+    public var isHapticEnabled: Bool                    // true (Mặc định)
+    public var hapticIntensity: HapticIntensity         // medium (Mặc định)
+    public var isSoundEnabled: Bool                     // false (Mặc định)
+    public var isKeyPreviewEnabled: Bool                // true (Mặc định)
+    public var isSpaceCursorTrackpadEnabled: Bool       // true (Mặc định)
+    public var isSwipeToDeleteEnabled: Bool             // true (Mặc định)
+    public var isSpaceDoubleTapPeriodEnabled: Bool      // true (Mặc định)
+    public var isAutoCapitalizationEnabled: Bool        // true (Mặc định)
+    public var longPressDelayMs: Int                    // 250 (Mặc định)
     
     // Giao diện & Chủ đề
-    public var themeMode: ThemeMode                     // system, light, dark
-    public var accentColorHex: String                   // Màu nhấn phím Enter
+    public var themeMode: ThemeMode                     // system (Mặc định)
+    public var accentColorHex: String                   // "#1a73e8" (Mặc định)
     
     // Bảng tạm & Gợi ý
-    public var isSuggestionBarEnabled: Bool             // Thanh gợi ý 3 từ
-    public var isClipboardEnabled: Bool                 // Lịch sử copy
-    public var isGlideTypingEnabled: Bool               // Gõ lướt vệt sáng
+    public var isSuggestionBarEnabled: Bool             // true (Mặc định)
+    public var isSoftSuggestionEnabled: Bool            // true (Gợi ý mềm không dấu - Mặc định)
+    public var isClipboardEnabled: Bool                 // true (Mặc định)
+    public var isGlideTypingEnabled: Bool               // true (Mặc định)
+    public var pasteButtonMode: String                  // "paste" (Chạm dán / Nhấn giữ xem lịch sử - Mặc định)
+    public var lastOneHandedSide: OneHandedMode         // .right (Ghi nhớ bên lệch một tay gần nhất)
 }
 ```
+
+---
+
+### 4.2. Cơ chế Deep Link Mở Cài Đặt (`vboard://settings`)
+Host App đăng ký Custom URL Scheme `vboard` trong `project.pbxproj` (`CFBundleURLTypes`). Khi người dùng chọn biểu tượng Cài đặt ⚙️ trên bàn phím (hoặc trong menu bong bóng phím `,`), hệ thống gửi URL `vboard://settings` thông qua `extensionContext?.open(url)` để kích hoạt Host App hiển thị màn hình cấu hình. Nếu quyền Full Access chưa được cấp, bàn phím tự động fallback hiển thị `QuickSettingsView` nội bộ.
 
 ---
 

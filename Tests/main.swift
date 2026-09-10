@@ -132,7 +132,7 @@ assertTest(spaceProxy.buffer == "xin -chao", name: "Trượt Space lùi 4 ký t�
 
 // 7. Đo lường hiệu năng (Benchmark)
 print("\n[7] Benchmark Tốc độ xử lý Keystroke:")
-let engine = VietnameseEngine()
+let benchmarkAdapter = OpenKeyEngineAdapter()
 let sampleContexts = ["", "t", "to", "tô", "viet", "nguo", "truong"]
 let chars: [Character] = ["s", "f", "r", "x", "j", "a", "w", "e", "o", "n", "h", "c"]
 let iterations = 20_000
@@ -141,7 +141,7 @@ let startTime = CFAbsoluteTimeGetCurrent()
 for i in 0..<iterations {
     let ctx = sampleContexts[i % sampleContexts.count]
     let ch = chars[i % chars.count]
-    _ = engine.processKeystroke(ch, contextBefore: ctx)
+    _ = benchmarkAdapter.processKeystroke(ch, contextBefore: ctx)
 }
 
 let elapsed = CFAbsoluteTimeGetCurrent() - startTime

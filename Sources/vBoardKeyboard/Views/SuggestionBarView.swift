@@ -13,6 +13,7 @@ public protocol SuggestionBarViewDelegate: AnyObject {
     func suggestionBarDidTapRedo(_ bar: SuggestionBarView)
     func suggestionBarDidTapSmartChip(_ bar: SuggestionBarView, clipText: String)
     func suggestionBarDidTapOneHanded(_ bar: SuggestionBarView)
+    func suggestionBarDidTapPaste(_ bar: SuggestionBarView)
 }
 
 public final class SuggestionBarView: UIView {
@@ -26,8 +27,9 @@ public final class SuggestionBarView: UIView {
         }
     }
 
-    // Normal mode views - dùng Vector SF Symbols
+    // Normal mode views - dùng Vector Icons
     private let menuButton = UIButton(type: .system)
+    private let pasteButton = UIButton(type: .system)
     private let clipboardButton = UIButton(type: .system)
     private let textEditingButton = UIButton(type: .system)
     private let developerButton = UIButton(type: .system)
@@ -71,6 +73,16 @@ public final class SuggestionBarView: UIView {
         menuButton.tintColor = .secondaryLabel
         menuButton.addTarget(self, action: #selector(toggleToolsMenu), for: .touchUpInside)
         addSubview(menuButton)
+
+        // Nút Dán / Lịch sử copy (Paste / Clipboard Button) luôn hiển thị ở mép phải
+        updatePasteButtonIcon()
+        pasteButton.tintColor = .secondaryLabel
+        pasteButton.addTarget(self, action: #selector(handlePasteTap), for: .touchUpInside)
+
+        let pasteLongPress = UILongPressGestureRecognizer(target: self, action: #selector(handlePasteLongPress(_:)))
+        pasteLongPress.minimumPressDuration = 0.35
+        pasteButton.addGestureRecognizer(pasteLongPress)
+        addSubview(pasteButton)
 
         // Nút Clipboard (Vector SF Symbol)
         let clipIcon = UIImage(systemName: "doc.on.clipboard", withConfiguration: symbolConfig)
@@ -258,9 +270,38 @@ public final class SuggestionBarView: UIView {
         delegate?.suggestionBar(self, didSelectWord: selected)
     }
 
+    public func updatePasteButtonIcon() {
+        let isClipboardMode = (vBoardSettings.shared.pasteButtonMode == "clipboard")
+        if isClipboardMode {
+            pasteButton.setImage(KeyboardIcons.clipboardHistoryIcon(size: CGSize(width: 18, height: 18)), for: .normal)
+        } else {
+            pasteButton.setImage(KeyboardIcons.pasteIcon(size: CGSize(width: 18, height: 18)), for: .normal)
+        }
+    }
+
     @objc private func handleClipboardTap() {
         HapticManager.shared.playSpecialKey()
         delegate?.suggestionBarDidTapClipboard(self)
+    }
+
+    @objc private func handlePasteTap() {
+        HapticManager.shared.playSpecialKey()
+        let isClipboardMode = (vBoardSettings.shared.pasteButtonMode == "clipboard")
+        if isClipboardMode {
+            delegate?.suggestionBarDidTapClipboard(self)
+        } else {
+            delegate?.suggestionBarDidTapPaste(self)
+        }
+    }
+
+    @objc private func handlePasteLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began else { return }
+        HapticManager.shared.playSpecialKey()
+        let currentMode = vBoardSettings.shared.pasteButtonMode
+        let newMode = (currentMode == "clipboard") ? "paste" : "clipboard"
+        vBoardSettings.shared.pasteButtonMode = newMode
+        vBoardSettings.shared.notifySettingsChanged()
+        updatePasteButtonIcon()
     }
 
     public override func layoutSubviews() {
@@ -271,7 +312,12 @@ public final class SuggestionBarView: UIView {
         separatorLayer.frame = CGRect(x: 0, y: barHeight - 0.5, width: barWidth, height: 0.5)
 
         let flankWidth: CGFloat = 36.0
+        let rightFlankWidth: CGFloat = 36.0
         menuButton.frame = CGRect(x: 4, y: 0, width: flankWidth, height: barHeight)
+
+        // Nút Dán (Paste) luôn hiển thị cố định ở góc phải thanh công cụ
+        pasteButton.frame = CGRect(x: barWidth - rightFlankWidth - 4, y: 0, width: rightFlankWidth, height: barHeight)
+        pasteButton.isHidden = false
 
         let showTools = isToolsExpanded || currentSuggestions.isEmpty
         if showTools {
@@ -303,9 +349,9 @@ public final class SuggestionBarView: UIView {
                 toolViews = [clipboardButton, developerButton, undoButton, redoButton, settingsButton]
             }
 
-            let availableToolsWidth = barWidth - flankWidth - 12.0
+            let availableToolsWidth = barWidth - flankWidth - rightFlankWidth - 12.0
             let count = CGFloat(toolViews.count)
-            let toolBtnWidth = min(50.0, availableToolsWidth / count)
+            let toolBtnWidth = min(46.0, availableToolsWidth / count)
             let startX = flankWidth + max(0, (availableToolsWidth - (toolBtnWidth * count)) / 2.0)
 
             for (idx, v) in toolViews.enumerated() {
@@ -315,16 +361,18 @@ public final class SuggestionBarView: UIView {
         } else if !smartChipButton.isHidden {
             dividerLayer1.isHidden = true
             dividerLayer2.isHidden = true
-            let chipSize = smartChipButton.sizeThatFits(CGSize(width: barWidth - flankWidth - 20, height: 28))
+            let maxChipW = barWidth - flankWidth - rightFlankWidth - 16.0
+            let chipSize = smartChipButton.sizeThatFits(CGSize(width: maxChipW, height: 28))
+            let chipW = min(chipSize.width, maxChipW)
             smartChipButton.frame = CGRect(
-                x: flankWidth + (barWidth - flankWidth - chipSize.width) / 2.0,
+                x: flankWidth + (maxChipW - chipW) / 2.0,
                 y: (barHeight - 26.0) / 2.0,
-                width: chipSize.width,
+                width: chipW,
                 height: 26.0
             )
         } else {
             let startX = flankWidth + 4.0
-            let availableWidth = barWidth - startX - 8.0
+            let availableWidth = barWidth - startX - rightFlankWidth - 8.0
             let cellWidth = availableWidth / 3.0
             var currentX = startX
 

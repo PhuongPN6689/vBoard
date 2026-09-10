@@ -501,6 +501,7 @@ struct OpenKeyPermutationTests {
     func testVNIPermutationsMatrix() {
         let adapter = OpenKeyEngineAdapter()
         adapter.engine.vInputType = .vni
+        adapter.engine.vUseModernOrthography = 1
 
         let testWords = ["tiếng", "việt", "nam", "được", "người", "toán", "thuỷ", "hoà"]
 

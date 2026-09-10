@@ -19,6 +19,7 @@ public final class KeyView: UIControl {
 
     private let label = UILabel()
     private let secondaryLabel = UILabel()
+    private let secondaryIconView = UIImageView()
     private let iconImageView = UIImageView()
     private var longPressTimer: Timer?
     private var isLongPressedTriggered = false
@@ -62,11 +63,18 @@ public final class KeyView: UIControl {
 
         // Nhãn phụ (góc trên phải - ví dụ số 1..0 hoặc ký tự đặc biệt)
         if let secondary = key.secondaryLabel {
-            secondaryLabel.text = secondary
-            secondaryLabel.textAlignment = .center
-            secondaryLabel.font = UIFont.systemFont(ofSize: 9.5, weight: .medium)
-            secondaryLabel.isUserInteractionEnabled = false
-            addSubview(secondaryLabel)
+            if secondary == "☺" {
+                secondaryIconView.image = KeyboardIcons.emojiSmileIcon(size: CGSize(width: 10, height: 10))
+                secondaryIconView.contentMode = .scaleAspectFit
+                secondaryIconView.isUserInteractionEnabled = false
+                addSubview(secondaryIconView)
+            } else {
+                secondaryLabel.text = secondary
+                secondaryLabel.textAlignment = .center
+                secondaryLabel.font = UIFont.systemFont(ofSize: 9.5, weight: .medium)
+                secondaryLabel.isUserInteractionEnabled = false
+                addSubview(secondaryLabel)
+            }
         }
 
         updateTheme()
@@ -144,6 +152,10 @@ public final class KeyView: UIControl {
             let secH: CGFloat = 12.0
             secondaryLabel.frame = CGRect(x: bounds.width - secW - 2.5, y: 2.5, width: secW, height: secH)
         }
+        if secondaryIconView.superview != nil {
+            let iconDim: CGFloat = 10.0
+            secondaryIconView.frame = CGRect(x: bounds.width - iconDim - 3.0, y: 3.5, width: iconDim, height: iconDim)
+        }
     }
 
     private func parseHexColor(_ hex: String) -> UIColor? {
@@ -205,8 +217,11 @@ public final class KeyView: UIControl {
             break
         }
 
-        secondaryLabel.textColor = isDark ? darkSecondary : lightSecondary
+        let secColor = isDark ? darkSecondary : lightSecondary
+        secondaryLabel.textColor = secColor
+        secondaryIconView.tintColor = secColor
         secondaryLabel.isHidden = !settings.isHintSymbolsEnabled
+        secondaryIconView.isHidden = !settings.isHintSymbolsEnabled
 
         let isBottomPunctuation: Bool
         if case .character(let s) = key.type, (s == "," || s == ".") {
@@ -237,22 +252,16 @@ public final class KeyView: UIControl {
             backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
             label.isHidden = true
             iconImageView.isHidden = false
-            let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
-            iconImageView.image = UIImage(systemName: "delete.backward", withConfiguration: config) ?? UIImage(systemName: "delete.left", withConfiguration: config)
+            iconImageView.image = KeyboardIcons.deleteIcon()
             iconImageView.tintColor = isDark ? darkText : lightText
 
         case .shift:
             backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
             label.isHidden = true
             iconImageView.isHidden = false
-            let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
-            if key.displayLabel == "⇪" {
-                iconImageView.image = UIImage(systemName: "capslock.fill", withConfiguration: config)
-            } else if key.displayLabel == "⬆" {
-                iconImageView.image = UIImage(systemName: "shift.fill", withConfiguration: config)
-            } else {
-                iconImageView.image = UIImage(systemName: "shift", withConfiguration: config)
-            }
+            let isCaps = (key.displayLabel == "⇪")
+            let isShift = (key.displayLabel == "⬆")
+            iconImageView.image = KeyboardIcons.shiftIcon(isCapsLocked: isCaps, isShiftActive: isShift)
             iconImageView.tintColor = isDark ? darkText : lightText
 
         case .globe:
@@ -275,8 +284,7 @@ public final class KeyView: UIControl {
             backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
             label.isHidden = true
             iconImageView.isHidden = false
-            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-            iconImageView.image = UIImage(systemName: "keyboard.chevron.compact.down", withConfiguration: config) ?? UIImage(systemName: "chevron.down", withConfiguration: config)
+            iconImageView.image = KeyboardIcons.dismissIcon()
             iconImageView.tintColor = isDark ? darkText : lightText
 
         case .modeSwitch:
@@ -286,7 +294,6 @@ public final class KeyView: UIControl {
             iconImageView.isHidden = true
 
         case .returnKey:
-            let symbolConfig = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
             label.isHidden = true
             iconImageView.isHidden = false
 
@@ -297,17 +304,7 @@ public final class KeyView: UIControl {
 
             backgroundColor = isSearch ? searchColor : accent
             iconImageView.tintColor = isSearch ? UIColor(red: 17/255, green: 17/255, blue: 17/255, alpha: 1.0) : UIColor.white
-
-            switch key.returnKeyType {
-            case .search:
-                iconImageView.image = UIImage(systemName: "magnifyingglass", withConfiguration: symbolConfig)
-            case .send:
-                iconImageView.image = UIImage(systemName: "paperplane.fill", withConfiguration: symbolConfig)
-            case .go, .next:
-                iconImageView.image = UIImage(systemName: "arrow.right", withConfiguration: symbolConfig)
-            default:
-                iconImageView.image = UIImage(systemName: "arrow.turn.down.left", withConfiguration: symbolConfig)
-            }
+            iconImageView.image = KeyboardIcons.returnIcon(type: key.returnKeyType)
         }
     }
 
@@ -393,7 +390,7 @@ public final class KeyView: UIControl {
         }
     }
 
-    private func stopRepeatDeleteTimer() {
+    public func stopRepeatDeleteTimer() {
         repeatDeleteTimer?.invalidate()
         repeatDeleteTimer = nil
     }
@@ -415,11 +412,12 @@ public final class KeyView: UIControl {
             startRepeatDeleteTimer()
         }
 
-        // Nhấn giữ theo cấu hình (mặc định 250ms chuẩn Gboard) để kích hoạt bong bóng Callout
+        // Nhấn giữ theo cấu hình (mặc định 250ms chuẩn Gboard)
+        let delaySec = max(0.15, Double(vBoardSettings.shared.longPressDelayMs) / 1000.0)
+        longPressTimer?.invalidate()
+
         let hasCallout = (KeyCalloutView.calloutItems(for: key.displayLabel, isShift: false) != nil) || (key.secondaryLabel != nil)
         if hasCallout {
-            longPressTimer?.invalidate()
-            let delaySec = max(0.15, Double(vBoardSettings.shared.longPressDelayMs) / 1000.0)
             longPressTimer = Timer.scheduledTimer(withTimeInterval: delaySec, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self = self, self.isHighlighted, !self.hasMovedBeyondTapThreshold else { return }
@@ -430,14 +428,33 @@ public final class KeyView: UIControl {
                     self.delegate?.keyView(self, didRequestCalloutFor: self.key)
                 }
             }
+        } else if case .modeSwitch = key.type {
+            // Trường hợp 3: Phím chuyển chế độ (?123) nhấn giữ để chuyển Dev Mode
+            longPressTimer = Timer.scheduledTimer(withTimeInterval: delaySec, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self = self, self.isHighlighted, !self.hasMovedBeyondTapThreshold else { return }
+                    self.isLongPressedTriggered = true
+                    self.hidePreviewPopup()
+                    self.delegate?.keyViewDidLongPress(self)
+                }
+            }
+        } else if case .space = key.type {
+            // Trường hợp 4: Phím Space
+            longPressTimer = Timer.scheduledTimer(withTimeInterval: delaySec, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self = self, self.isHighlighted, !self.hasMovedBeyondTapThreshold else { return }
+                    self.isLongPressedTriggered = true
+                    self.delegate?.keyViewDidLongPress(self)
+                }
+            }
         }
     }
 
     /// Hủy bỏ nhấn giữ ngay lập tức (dùng khi vuốt Glide hoặc nhận diện cử chỉ khác)
     public func cancelLongPress() {
-        if isCalloutActive { return }
         longPressTimer?.invalidate()
         longPressTimer = nil
+        stopRepeatDeleteTimer()
         isLongPressedTriggered = false
         isCalloutActive = false
         hidePreviewPopup()
@@ -456,10 +473,11 @@ public final class KeyView: UIControl {
             let ptInTarget = convert(ptInSelf, to: delegate as? UIView ?? superview)
             delegate?.keyView(self, didUpdateCalloutTouch: ptInTarget)
         } else {
-            // Nhận diện cử chỉ Flick Down vuốt phím xuống để nhập ký hiệu phụ ngay lập tức
             let dy = currentPoint.y - initialTouchPoint.y
             let dx = abs(currentPoint.x - initialTouchPoint.x)
-            if vBoardSettings.shared.isFlickDownEnabled, !didFlickDown, let sec = key.secondaryLabel, dy > 14.0, dy > 1.8 * dx {
+
+            // Nhận diện cử chỉ Flick Down chỉ khi vuốt thuần túy thẳng xuống và chưa trượt ngang
+            if vBoardSettings.shared.isFlickDownEnabled, !didFlickDown, !hasMovedBeyondTapThreshold, let sec = key.secondaryLabel, dy > 16.0, dy > 2.2 * dx {
                 didFlickDown = true
                 hasMovedBeyondTapThreshold = true
                 cancelLongPress()
@@ -469,7 +487,7 @@ public final class KeyView: UIControl {
                 return
             }
 
-            if dist > 10.0 {
+            if dist > 8.0 {
                 hasMovedBeyondTapThreshold = true
                 cancelLongPress()
             }

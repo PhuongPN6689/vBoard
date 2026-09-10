@@ -28,10 +28,11 @@ public final class SpaceCursorHandler: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard let proxy = proxy else { return }
+        guard vBoardSettings.shared.isSpaceCursorGlideEnabled, let proxy = proxy else { return }
 
         switch gesture.state {
         case .began:
+            (gesture.view as? KeyView)?.cancelLongPress()
             accumulatedTranslationX = 0
             HapticManager.shared.prepare()
             onTrackpadStateChange?(true)

@@ -56,10 +56,12 @@ public final class BackspaceSwipeHandler: NSObject, UIGestureRecognizerDelegate 
     }
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard let proxy = proxy else { return }
+        guard vBoardSettings.shared.isSwipeDeleteEnabled, let proxy = proxy else { return }
 
         switch gesture.state {
         case .began:
+            (gesture.view as? KeyView)?.stopRepeatDeleteTimer()
+            (gesture.view as? KeyView)?.cancelLongPress()
             HapticManager.shared.prepare()
             onSwipeStateChange?(true)
             let context = proxy.documentContextBeforeInput ?? ""

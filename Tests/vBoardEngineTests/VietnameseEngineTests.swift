@@ -191,6 +191,7 @@ struct VietnameseEngineTests {
     @Test("Kiểm tra tính năng đặc trưng của OpenKey (phím z gỡ dấu, quick telex, phím ngoặc)")
     func testOpenKeySpecificFeatures() {
         let adapter = TextProxyAdapter()
+        adapter.engine.isQuickTelexEnabled = true
 
         let testCases: [(input: String, expected: String)] = [
             ("toansz", "toan"),
@@ -215,6 +216,32 @@ struct VietnameseEngineTests {
         }
     }
 
+    @Test("Kiểm tra gõ moiws ra mới và viettel ra viettel theo chuẩn mặc định OpenKey")
+    func testMoiwsAndViettelDefaultBehavior() {
+        let adapter = TextProxyAdapter()
+        // Cấu hình mặc định: Quick Telex TẮT (vQuickTelex = 0)
+        #expect(adapter.engine.isQuickTelexEnabled == false)
+
+        let testCases: [(input: String, expected: String)] = [
+            ("moiws", "mới"),
+            ("moisw", "mới"),
+            ("viettel", "viettel"),
+            ("vietnam", "vietnam"),
+            ("letter", "letter"),
+            ("chuiwr", "chửi"),
+            ("luuw", "lưu"),
+            ("khoanw", "khoăn"),
+            ("troiwf", "trời"),
+            ("choiw", "chơi")
+        ]
+
+        for (input, expected) in testCases {
+            let proxy = MockTextDocumentProxy()
+            proxy.typeSequence(input, adapter: adapter)
+            #expect(proxy.buffer == expected, "Gõ '\(input)' phải ra '\(expected)', thực tế: '\(proxy.buffer)'")
+        }
+    }
+
     @Test("Kiểm tra cử chỉ di chuyển con trỏ phím Space")
     func testSpaceCursorMovement() {
         let adapter = TextProxyAdapter()
@@ -234,8 +261,8 @@ struct VietnameseEngineTests {
 
     @Test("Kiểm tra bật/tắt các tuỳ chọn cấu hình OpenKey")
     func testOpenKeyConfigurationToggles() {
-        let engine = VietnameseEngine()
-        let adapter = TextProxyAdapter(engine: engine)
+        let adapter = TextProxyAdapter()
+        let engine = adapter.engine
 
         // 1. Tắt Quick Telex
         engine.isQuickTelexEnabled = false
@@ -323,7 +350,7 @@ struct VietnameseEngineTests {
         #expect(proxy10.buffer == "tượ")
 
         // 11. Kiểm tra chuyển đổi phong cách đặt dấu oà/uý (cũ) vs òa/úy (mới)
-        engine.diacriticStyle = .oldStyle
+        engine.vUseModernOrthography = 1
         let proxy11a = MockTextDocumentProxy()
         proxy11a.typeSequence("hoaf", adapter: adapter)
         #expect(proxy11a.buffer == "hoà")
@@ -332,7 +359,7 @@ struct VietnameseEngineTests {
         proxy11b.typeSequence("thuyf", adapter: adapter)
         #expect(proxy11b.buffer == "thuỳ")
 
-        engine.diacriticStyle = .newStyle
+        engine.vUseModernOrthography = 0
         let proxy11c = MockTextDocumentProxy()
         proxy11c.typeSequence("hoaf", adapter: adapter)
         #expect(proxy11c.buffer == "hòa")
@@ -446,7 +473,7 @@ struct VietnameseEngineTests {
 
     @Test("Đo lường hiệu năng xử lý ký tự (< 0.05ms mỗi lần gõ)")
     func testPerformanceKeystrokeLatency() {
-        let engine = VietnameseEngine()
+        let adapter = OpenKeyEngineAdapter()
         let sampleContexts = ["", "t", "to", "tô", "viet", "nguo", "truong"]
         let chars: [Character] = ["s", "f", "r", "x", "j", "a", "w", "e", "o", "n", "h", "c"]
 
@@ -456,7 +483,7 @@ struct VietnameseEngineTests {
         for i in 0..<iterations {
             let ctx = sampleContexts[i % sampleContexts.count]
             let ch = chars[i % chars.count]
-            _ = engine.processKeystroke(ch, contextBefore: ctx)
+            _ = adapter.processKeystroke(ch, contextBefore: ctx)
         }
 
         let elapsed = CFAbsoluteTimeGetCurrent() - startTime
@@ -578,6 +605,8 @@ struct VietnameseEngineTests {
         #expect(proxy.buffer == "toán")
 
         // 5. Test Undo mở rộng phím tắt (Shortcut Expansion)
+        ShortcutManager.shared.addShortcut(shortcut: "dc", replacement: "được")
+        vBoardSettings.shared.isShortcutExpansionEnabled = true
         proxy.buffer = ""
         proxy.cursorPosition = 0
         proxy.typeSequence("dc ", adapter: adapter)
@@ -659,6 +688,8 @@ struct VietnameseEngineTests {
         settings.isGlideTrailEnabled = true
         #expect(settings.isGlideTrailEnabled == true)
 
-        #expect(settings.toolbarItemsOrder.contains("clipboard"))
+        #expect(settings.toolbarItemsOrder.contains("quickSettings"))
+        #expect(settings.pasteButtonMode == "paste" || settings.pasteButtonMode == "clipboard")
+        #expect(settings.lastOneHandedSide == .right || settings.lastOneHandedSide == .left)
     }
 }

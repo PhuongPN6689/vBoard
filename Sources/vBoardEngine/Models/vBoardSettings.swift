@@ -248,6 +248,8 @@ public final class vBoardSettings: @unchecked Sendable {
                 static let isShortcutExpansionEnabled = "vboard_shortcut_expansion"
 
         static let oneHandedMode = "vboard_one_handed_mode"
+        static let lastOneHandedSide = "vboard_last_one_handed_side"
+        static let pasteButtonMode = "vboard_paste_button_mode"
         static let toolbarItemsOrder = "vboard_toolbar_items_order"
         static let isNumberRowForPasswordEnabled = "vboard_number_row_password"
         static let isCommaKeyEnabled = "vboard_comma_key_enabled"
@@ -306,7 +308,7 @@ public final class vBoardSettings: @unchecked Sendable {
 
     public var isQuickTelexEnabled: Bool {
         get {
-            if defaults.object(forKey: Keys.isQuickTelexEnabled) == nil { return true }
+            if defaults.object(forKey: Keys.isQuickTelexEnabled) == nil { return false }
             return defaults.bool(forKey: Keys.isQuickTelexEnabled)
         }
         set {
@@ -389,7 +391,7 @@ public final class vBoardSettings: @unchecked Sendable {
     /// Tự khôi phục phím gốc với từ sai chính tả
     public var isRestoreIfWrongSpellingEnabled: Bool {
         get {
-            if defaults.object(forKey: Keys.isRestoreIfWrongSpellingEnabled) == nil { return true }
+            if defaults.object(forKey: Keys.isRestoreIfWrongSpellingEnabled) == nil { return false }
             return defaults.bool(forKey: Keys.isRestoreIfWrongSpellingEnabled)
         }
         set {
@@ -705,14 +707,41 @@ public final class vBoardSettings: @unchecked Sendable {
             return OneHandedMode(rawValue: raw) ?? .off
         }
         set {
+            if newValue == .left || newValue == .right {
+                lastOneHandedSide = newValue
+            }
             defaults.set(newValue.rawValue, forKey: Keys.oneHandedMode)
+        }
+    }
+
+    /// Ghi nhớ hướng lệch gần nhất của chế độ 1 tay (mặc định: lệch phải .right)
+    public var lastOneHandedSide: OneHandedMode {
+        get {
+            let raw = defaults.string(forKey: Keys.lastOneHandedSide) ?? "right"
+            let side = OneHandedMode(rawValue: raw) ?? .right
+            return (side == .off) ? .right : side
+        }
+        set {
+            if newValue == .left || newValue == .right {
+                defaults.set(newValue.rawValue, forKey: Keys.lastOneHandedSide)
+            }
+        }
+    }
+
+    /// Chế độ của nút Dán góc phải: "paste" (dán trực tiếp) hoặc "clipboard" (mở lịch sử copy)
+    public var pasteButtonMode: String {
+        get {
+            return defaults.string(forKey: Keys.pasteButtonMode) ?? "paste"
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.pasteButtonMode)
         }
     }
 
     public var toolbarItemsOrder: [String] {
         get {
             return defaults.stringArray(forKey: Keys.toolbarItemsOrder) ?? [
-                "clipboard", "dev", "undoRedo", "quickSettings", "oneHanded"
+                "dev", "undoRedo", "quickSettings", "oneHanded"
             ]
         }
         set {

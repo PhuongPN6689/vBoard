@@ -10,6 +10,7 @@ public protocol KeyboardViewDelegate: AnyObject {
     func keyboardViewDidDismiss(_ keyboardView: KeyboardView)
     func keyboardView(_ keyboardView: KeyboardView, didGlideWord word: String)
     func keyboardViewDidRequestEmojiPicker(_ keyboardView: KeyboardView)
+    func keyboardViewDidOpenSettingsApp(_ keyboardView: KeyboardView)
 }
 
 public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDelegate, KeyCalloutViewDelegate, TextEditingViewDelegate {
@@ -57,6 +58,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     private var glideTrackedChars: [Character] = []
     private var lastGlidePoint: CGPoint = .zero
     private var lastGlideCompletedTimestamp: TimeInterval = 0
+    private var glideInitialTouchPoint: CGPoint = .zero
 
     private var lastShiftTapTime: TimeInterval = 0
     private var rowViews: [[KeyView]] = []
@@ -222,13 +224,12 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         layer.addSublayer(glideTrailLayer)
 
         // Setup One-Handed Side Panel
-        let sideConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
-        oneHandedSwapButton.setImage(UIImage(systemName: "arrow.left.and.right", withConfiguration: sideConfig), for: .normal)
+        oneHandedSwapButton.setImage(KeyboardIcons.oneHandedSwapIcon(), for: .normal)
         oneHandedSwapButton.tintColor = .secondaryLabel
         oneHandedSwapButton.addTarget(self, action: #selector(handleOneHandedSwap), for: .touchUpInside)
         oneHandedSidePanel.addSubview(oneHandedSwapButton)
 
-        oneHandedExpandButton.setImage(UIImage(systemName: "arrow.up.left.and.arrow.down.right", withConfiguration: sideConfig), for: .normal)
+        oneHandedExpandButton.setImage(KeyboardIcons.oneHandedExpandIcon(), for: .normal)
         oneHandedExpandButton.tintColor = .secondaryLabel
         oneHandedExpandButton.addTarget(self, action: #selector(handleOneHandedExpand), for: .touchUpInside)
         oneHandedSidePanel.addSubview(oneHandedExpandButton)
@@ -236,9 +237,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         oneHandedSidePanel.isHidden = true
         addSubview(oneHandedSidePanel)
 
-        let dismissConfig = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-        let dismissIcon = UIImage(systemName: "keyboard.chevron.compact.down", withConfiguration: dismissConfig) ?? UIImage(systemName: "chevron.down", withConfiguration: dismissConfig)
-        dismissButton.setImage(dismissIcon, for: .normal)
+        dismissButton.setImage(KeyboardIcons.dismissIcon(), for: .normal)
         dismissButton.tintColor = .secondaryLabel
         dismissButton.addTarget(self, action: #selector(handleDismissTap), for: .touchUpInside)
         addSubview(dismissButton)
@@ -367,8 +366,10 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                case .character(let charStr) = hitKey.key.type,
                let first = charStr.first,
                first.isLetter {
+                glideInitialTouchPoint = loc
                 return true
             } else {
+                glideInitialTouchPoint = .zero
                 return false
             }
         }
@@ -393,13 +394,14 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     }
 
     public func cancelAllKeyLongPresses() {
-        if calloutView.isVisible { return }
         for row in rowViews {
             for kv in row {
                 kv.cancelLongPress()
             }
         }
-        calloutView.dismiss()
+        if calloutView.isVisible {
+            calloutView.dismiss()
+        }
     }
 
     @objc private func handleGlidePan(_ pan: UIPanGestureRecognizer) {
@@ -411,11 +413,11 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
               !isNumberPadActive,
               !isNumberLayerActive,
               !isDeveloperModeActive,
-              !isOverlayOpen,
-              !calloutView.isVisible else {
+              !isOverlayOpen else {
             glideTrailLayer.clear()
             isGlideTrackingActive = false
             glideTrackedChars.removeAll()
+            glideInitialTouchPoint = .zero
             return
         }
 
@@ -423,31 +425,42 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         switch pan.state {
         case .began:
-            guard let hitKey = findNearestKeyView(at: loc),
+            let startPoint = (glideInitialTouchPoint != .zero) ? glideInitialTouchPoint : loc
+            guard let hitKey = findNearestKeyView(at: startPoint) ?? findNearestKeyView(at: loc),
                   case .character(let charStr) = hitKey.key.type,
                   let first = charStr.first,
                   first.isLetter else {
                 pan.state = .cancelled
+                glideInitialTouchPoint = .zero
                 return
             }
-            if !calloutView.isVisible {
-                cancelAllKeyLongPresses()
-            }
-            isGlideTrackingActive = false
+            cancelAllKeyLongPresses()
+            isGlideTrackingActive = true
             glideTrackedChars.removeAll()
             glideTrailLayer.clear()
+
+            // Thêm ngay điểm chạm ban đầu vào vệt vẽ để không bao giờ bị thiếu điểm đầu
+            if vBoardSettings.shared.isGlideTrailEnabled {
+                glideTrailLayer.addPoint(startPoint)
+                if hypot(loc.x - startPoint.x, loc.y - startPoint.y) > 2.0 {
+                    glideTrailLayer.addPoint(loc)
+                }
+            }
             lastGlidePoint = loc
             glideTrackedChars.append(first)
 
+            if let currentHit = findNearestKeyView(at: loc),
+               case .character(let curStr) = currentHit.key.type,
+               let curChar = curStr.first,
+               curChar.isLetter,
+               curChar != first {
+                glideTrackedChars.append(curChar)
+            }
+
         case .changed:
-            guard !calloutView.isVisible else { return }
-            let translation = pan.translation(in: self)
-            let distance = hypot(translation.x, translation.y)
-            if distance > 6.0 {
-                if !isGlideTrackingActive {
-                    isGlideTrackingActive = true
-                    cancelAllKeyLongPresses()
-                }
+            if !isGlideTrackingActive {
+                isGlideTrackingActive = true
+                cancelAllKeyLongPresses()
             }
 
             if isGlideTrackingActive {
@@ -457,7 +470,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
                 // Nội suy các điểm giữa lastGlidePoint và loc để không bỏ sót phím khi vuốt nhanh
                 let totalDist = hypot(loc.x - lastGlidePoint.x, loc.y - lastGlidePoint.y)
-                let stepDist: CGFloat = 16.0
+                let stepDist: CGFloat = 14.0
                 let steps = max(1, Int(ceil(totalDist / stepDist)))
 
                 for i in 1...steps {
@@ -468,7 +481,8 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
                     if let hitView = findNearestKeyView(at: samplePt),
                        case .character(let charStr) = hitView.key.type,
-                       let ch = charStr.first {
+                       let ch = charStr.first,
+                       ch.isLetter {
                         if glideTrackedChars.last != ch {
                             glideTrackedChars.append(ch)
                         }
@@ -482,7 +496,8 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                 // Đảm bảo phím cuối cùng tại điểm kết thúc được ghi nhận
                 if let lastHit = findNearestKeyView(at: loc),
                    case .character(let charStr) = lastHit.key.type,
-                   let lastChar = charStr.first {
+                   let lastChar = charStr.first,
+                   lastChar.isLetter {
                     if glideTrackedChars.last != lastChar {
                         glideTrackedChars.append(lastChar)
                     }
@@ -501,11 +516,13 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             isGlideTrackingActive = false
             lastGlideCompletedTimestamp = CACurrentMediaTime()
             glideTrackedChars.removeAll()
+            glideInitialTouchPoint = .zero
 
         case .cancelled, .failed:
             glideTrailLayer.fadeOut()
             isGlideTrackingActive = false
             glideTrackedChars.removeAll()
+            glideInitialTouchPoint = .zero
 
         default:
             break
@@ -563,12 +580,17 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             return suggestionBar.hitTest(convert(point, to: suggestionBar), with: event)
         }
 
-        // 5. Phím hạ bàn phím
+        // 5. One-Handed Mode Side Panel (Xử lý nút chuyển tay và nút phóng to bàn phím)
+        if !oneHandedSidePanel.isHidden && oneHandedSidePanel.frame.contains(point) {
+            return oneHandedSidePanel.hitTest(convert(point, to: oneHandedSidePanel), with: event)
+        }
+
+        // 6. Phím hạ bàn phím
         if !dismissButton.isHidden && dismissButton.frame.contains(point) {
             return dismissButton
         }
 
-        // 6. Nhận diện phím bấm bàn phím
+        // 7. Nhận diện phím bấm bàn phím
         if let nearestKey = findNearestKeyView(at: point) {
             return nearestKey
         }
@@ -579,7 +601,12 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     public func findNearestKeyView(at point: CGPoint) -> KeyView? {
         guard !rowViews.isEmpty else { return nil }
 
-        // Tìm hàng phím có khoảng cách tâm dọc (midY) gần điểm chạm nhất (tránh lỗi giao thoa nuốt phím A và L)
+        // Nếu bàn phím đang ở chế độ 1 tay và điểm chạm rơi vào bảng điều khiển bên hông, không nhận diện phím
+        if !oneHandedSidePanel.isHidden && oneHandedSidePanel.frame.contains(point) {
+            return nil
+        }
+
+        // Tìm hàng phím có khoảng cách tâm dọc (midY) gần điểm chạm nhất
         var closestRowIndex = 0
         var minRowDiff: CGFloat = .greatestFiniteMagnitude
         for (rIdx, row) in rowViews.enumerated() {
@@ -594,12 +621,11 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         let row = rowViews[closestRowIndex]
         guard let firstKey = row.first, let lastKey = row.last else { return nil }
 
-        // Mở rộng viền trái tuyệt đối ra sát mép màn hình (x: 0) cho phím đầu hàng (đặc biệt phím A mép trái)
-        if point.x <= firstKey.frame.maxX {
+        // Giới hạn điểm chạm trong biên giới hạn thực tế của hàng phím
+        if point.x <= firstKey.frame.minX {
             return firstKey
         }
-        // Mở rộng viền phải tuyệt đối ra sát mép màn hình (x: bounds.width) cho phím cuối hàng (đặc biệt phím L mép phải)
-        if point.x >= lastKey.frame.minX {
+        if point.x >= lastKey.frame.maxX {
             return lastKey
         }
 
@@ -707,7 +733,6 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         })
         row3.append(KeyboardKey.delete(weight: 1.55))
 
-        let isGlobeHidden = settings.isGlobeKeyHidden
         let isCommaEnabled = settings.isCommaKeyEnabled
         let isPeriodEnabled = settings.isPeriodKeyEnabled
 
@@ -715,16 +740,11 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             KeyboardKey.modeSwitch("?123", weight: 1.55)
         ]
         if isCommaEnabled {
-            row4.append(KeyboardKey.char(",", secondary: "☺", weight: 1.0))
+            row4.append(KeyboardKey.char(",", secondary: "☺", weight: 1.15))
         }
-        if !isGlobeHidden {
-            row4.append(KeyboardKey.globe(weight: 1.0))
-        } else {
-            row4.append(KeyboardKey.emoji(weight: 1.0))
-        }
-        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.0))
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.8))
         if isPeriodEnabled {
-            row4.append(KeyboardKey.char(".", weight: 1.0))
+            row4.append(KeyboardKey.char(".", weight: 1.15))
         }
         row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.55))
 
@@ -1164,6 +1184,10 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             setDeveloperMode(!isDeveloperModeActive)
             return
         }
+        if case .space = keyView.key.type {
+            HapticManager.shared.playSpecialKey()
+            return
+        }
         self.keyView(keyView, didRequestCalloutFor: keyView.key)
     }
 
@@ -1171,39 +1195,44 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     public func keyView(_ keyView: KeyView, didRequestCalloutFor key: KeyboardKey) {
         let isShift = isShiftActive || isCapsLockActive
         let char = key.displayLabel
-        var items = KeyCalloutView.calloutItems(for: char, isShift: isShift)
+        var items: [String] = []
 
-        // Nếu phím có ký tự phụ secondaryLabel (ví dụ: hàng số tắt thì p có secondary "0"):
-        if let sec = key.secondaryLabel {
-            if items == nil {
-                items = [sec, char]
-            } else if !items!.contains(sec) {
-                items!.insert(sec, at: 0)
+        let staticItems = KeyCalloutView.calloutItems(for: char, isShift: isShift)
+        if let staticItems = staticItems, !staticItems.isEmpty {
+            items = staticItems
+            // Nếu phím có secondaryLabel (ví dụ hàng 1 khi bật/tắt phím số: 1..0 hoặc %..}),
+            // đảm bảo ký tự phụ thực tế hiện tại của phím luôn đứng ở vị trí đầu tiên
+            if let sec = key.secondaryLabel, !items.contains(sec) {
+                items.insert(sec, at: 0)
+            } else if let sec = key.secondaryLabel, let idx = items.firstIndex(of: sec), idx != 0 {
+                items.remove(at: idx)
+                items.insert(sec, at: 0)
             }
+        } else if let sec = key.secondaryLabel {
+            // Phụ âm thông thường (q, w, r, t, p, s, f, g, h, j, k, l, z, x, c, v, b, n, m...):
+            // Hiển thị popover 2 nút: [Ký tự phụ, Ký tự gốc]
+            items = [sec, char]
         }
 
-        guard let calloutItems = items, !calloutItems.isEmpty else { return }
+        guard !items.isEmpty else { return }
 
         // Xác định defaultIndex phù hợp nhất:
         var defaultIdx = 0
         if char == "." {
-            // Đối với dấu chấm ".", ưu tiên chọn dấu phẩy "," (index 14) hoặc "?" (index 15) giống hình mẫu Gboard
-            if let commaIdx = calloutItems.firstIndex(of: ",") {
+            // Đối với dấu chấm ".", ưu tiên chọn dấu phẩy "," hoặc "?"
+            if let commaIdx = items.firstIndex(of: ",") {
                 defaultIdx = commaIdx
-            } else if let qIdx = calloutItems.firstIndex(of: "?") {
+            } else if let qIdx = items.firstIndex(of: "?") {
                 defaultIdx = qIdx
             }
         } else if char == "," {
-            if let dotIdx = calloutItems.firstIndex(of: ".") {
-                defaultIdx = dotIdx
-            } else if let qIdx = calloutItems.firstIndex(of: "?") {
-                defaultIdx = qIdx
-            }
-        } else if let sec = key.secondaryLabel, let secIdx = calloutItems.firstIndex(of: sec) {
-            defaultIdx = secIdx
+            defaultIdx = items.firstIndex(of: "☺") ?? 0
+        } else if items.count == 2, let sec = key.secondaryLabel, items[0] == sec {
+            // Với popover 2 nút [sec, char], nhả tay ra mặc định nhận ký tự phụ sec
+            defaultIdx = 0
         }
 
-        calloutView.show(items: calloutItems, defaultIndex: defaultIdx, sourceKey: keyView, in: self)
+        calloutView.show(items: items, defaultIndex: defaultIdx, sourceKey: keyView, in: self)
         bringSubviewToFront(calloutView)
     }
 
@@ -1214,13 +1243,14 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     public func keyViewDidEndCallout(_ keyView: KeyView) -> String? {
         if let selected = calloutView.commitSelection() {
             HapticManager.shared.playKeyTap()
-            if selected == "⚙️" {
-                showQuickSettingsView(delegate: delegate as? QuickSettingsViewDelegate)
+            if selected == "⚙️" || selected == "settings" {
+                delegate?.keyboardViewDidOpenSettingsApp(self)
                 return selected
-            } else if selected == "📱" {
-                let cur = vBoardSettings.shared.oneHandedMode
-                vBoardSettings.shared.oneHandedMode = (cur == .off) ? .right : .off
-                vBoardSettings.shared.notifySettingsChanged()
+            } else if selected == "☺" || selected == "😊" || selected == "emoji" {
+                delegate?.keyboardViewDidRequestEmojiPicker(self)
+                return selected
+            } else if selected == "🌐" {
+                delegate?.keyboardViewDidRequestNextKeyboard(self)
                 return selected
             }
             let simulatedKey = KeyboardKey.char(selected)
@@ -1236,13 +1266,14 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
     // MARK: - KeyCalloutViewDelegate
     public func keyCalloutView(_ calloutView: KeyCalloutView, didSelectItem text: String) {
-        if text == "⚙️" {
-            showQuickSettingsView(delegate: delegate as? QuickSettingsViewDelegate)
+        if text == "⚙️" || text == "settings" {
+            delegate?.keyboardViewDidOpenSettingsApp(self)
             return
-        } else if text == "📱" {
-            let cur = vBoardSettings.shared.oneHandedMode
-            vBoardSettings.shared.oneHandedMode = (cur == .off) ? .right : .off
-            vBoardSettings.shared.notifySettingsChanged()
+        } else if text == "☺" || text == "😊" || text == "emoji" {
+            delegate?.keyboardViewDidRequestEmojiPicker(self)
+            return
+        } else if text == "🌐" {
+            delegate?.keyboardViewDidRequestNextKeyboard(self)
             return
         }
         let simulatedKey = KeyboardKey.char(text)

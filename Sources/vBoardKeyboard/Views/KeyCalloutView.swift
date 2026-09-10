@@ -75,12 +75,32 @@ public final class KeyCalloutView: UIView {
 
         for item in items {
             let label = UILabel()
-            label.text = item
             label.textAlignment = .center
-            label.font = (item.count > 1) ? UIFont.systemFont(ofSize: 15, weight: .medium) : UIFont.systemFont(ofSize: 19, weight: .regular)
-            label.textColor = textColor
             label.layer.cornerRadius = 6.0
             label.layer.masksToBounds = true
+
+            if item == "⚙️" || item == "settings" {
+                // Hiển thị biểu tượng bánh răng Vector
+                label.text = nil
+                let iconView = UIImageView(image: KeyboardIcons.settingsGearIcon(size: CGSize(width: 22, height: 22)))
+                iconView.tintColor = textColor
+                iconView.contentMode = .center
+                iconView.tag = 999
+                label.addSubview(iconView)
+            } else if item == "☺" || item == "emoji" {
+                // Hiển thị biểu tượng mặt cười Vector
+                label.text = nil
+                let iconView = UIImageView(image: KeyboardIcons.emojiSmileIcon(size: CGSize(width: 22, height: 22)))
+                iconView.tintColor = textColor
+                iconView.contentMode = .center
+                iconView.tag = 999
+                label.addSubview(iconView)
+            } else {
+                label.text = item
+                label.font = (item.count > 1) ? UIFont.systemFont(ofSize: 15, weight: .medium) : UIFont.systemFont(ofSize: 19, weight: .regular)
+                label.textColor = textColor
+            }
+
             contentView.addSubview(label)
             itemViews.append(label)
         }
@@ -138,6 +158,9 @@ public final class KeyCalloutView: UIView {
                     width: itemWidth,
                     height: itemHeight
                 )
+                if let iconView = label.viewWithTag(999) as? UIImageView {
+                    iconView.frame = label.bounds
+                }
             }
         }
 
@@ -181,17 +204,24 @@ public final class KeyCalloutView: UIView {
         let defaultText = isDark ? UIColor.white : UIColor(red: 31/255, green: 31/255, blue: 31/255, alpha: 1.0)
 
         for (idx, label) in itemViews.enumerated() {
-            if idx == selectedIndex {
+            let isSelected = (idx == selectedIndex)
+            if isSelected {
                 label.backgroundColor = highlightBg
                 label.textColor = highlightText
                 label.font = UIFont.systemFont(ofSize: label.font.pointSize, weight: .bold)
                 label.layer.cornerRadius = min(label.bounds.width, label.bounds.height) / 2.0
                 label.layer.masksToBounds = true
+                if let iconView = label.viewWithTag(999) as? UIImageView {
+                    iconView.tintColor = highlightText
+                }
             } else {
                 label.backgroundColor = .clear
                 label.textColor = defaultText
                 label.font = UIFont.systemFont(ofSize: label.font.pointSize, weight: .regular)
                 label.layer.cornerRadius = 6.0
+                if let iconView = label.viewWithTag(999) as? UIImageView {
+                    iconView.tintColor = defaultText
+                }
             }
         }
     }
@@ -258,13 +288,9 @@ public final class KeyCalloutView: UIView {
                 ["6", "Y", "Ý", "Ỳ", "Ỷ", "Ỹ", "Ỵ"] :
                 ["6", "y", "ý", "ỳ", "ỷ", "ỹ", "ỵ"]
 
-        // Phụ âm đặc biệt
+        // Phụ âm đặc biệt tiếng Việt
         case "d":
             return isShift ? ["Đ", "D"] : ["đ", "d"]
-        case "c":
-            return isShift ? ["Ç", "C"] : ["ç", "c"]
-        case "n":
-            return isShift ? ["Ñ", "N"] : ["ñ", "n"]
 
         // Dấu chấm câu và ký hiệu (Bảng lưới 2 hàng x 8 cột = 16 ký hiệu chuẩn Gboard)
         case ".":
@@ -273,11 +299,8 @@ public final class KeyCalloutView: UIView {
                 ";", "/", "(", ")", "#", "!", "?", "."
             ]
         case ",":
-            // Bảng ký hiệu chuẩn Gboard kết hợp Swipe Callout Cài đặt & Một tay (Mục 18)
-            return [
-                "⚙️", "📱", "&", "%", "+", "\"", "-", ":",
-                ";", "/", "(", ")", "#", "!", ",", "?"
-            ]
+            // Phím phẩy tích hợp thao tác nhanh: Emoji, Cài đặt ứng dụng chính
+            return ["☺", "⚙️"]
 
         // Ký tự tiền tệ & toán học
         case "$": return ["₫", "€", "£", "¥", "¢", "$"]
@@ -285,8 +308,6 @@ public final class KeyCalloutView: UIView {
         case "-": return ["–", "—", "•", "-"]
         case "%": return ["‰", "%"]
         case "/": return ["\\", "/"]
-        case "?": return ["¿", "?"]
-        case "!": return ["¡", "!"]
 
         default:
             return nil

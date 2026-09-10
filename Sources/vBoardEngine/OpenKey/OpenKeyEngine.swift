@@ -16,9 +16,9 @@ public final class OpenKeyEngine: @unchecked Sendable {
     public var vFreeMark: Int = 0                  // 0: Không bỏ dấu tự do (tuân thủ ngữ pháp), 1: Bỏ dấu tự do
     public var vCodeTable: Int = 0                 // 0: Unicode dựng sẵn, 1: TCVN3, 2: VNI, 3: Unicode tổ hợp
     public var vCheckSpelling: Int = 1             // 0: Không kiểm tra chính tả, 1: Kiểm tra chính tả
-    public var vUseModernOrthography: Int = 1      // 0: oà, uý (cũ); 1: òa, úy (mới)
+    public var vUseModernOrthography: Int = 0      // 0: òa, úy; 1: oà, uý
     public var vQuickTelex: Int = 0                // 0: Tắt (mặc định OpenKey), 1: Bật (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th, uu=ươ)
-    public var vRestoreIfWrongSpelling: Int = 1    // 0: Không khôi phục, 1: Khôi phục phím gốc nếu sai chính tả
+    public var vRestoreIfWrongSpelling: Int = 0    // 0: Không khôi phục, 1: Khôi phục phím gốc nếu sai chính tả
     public var vFixRecommendBrowser: Int = 1       // Sửa lỗi gợi ý URL trình duyệt
     public var vUseMacro: Int = 1                  // Gõ tắt bật/tắt
     public var vAutoCapsMacro: Int = 1             // Tự động viết hoa/thường theo từ khóa gõ tắt
@@ -28,6 +28,43 @@ public final class OpenKeyEngine: @unchecked Sendable {
     public var vQuickEndConsonant: Int = 0         // g->ng, h->nh, k->ch
 
     public var macroManager: OpenKeyMacroManager = .shared
+
+    public var isEmpty: Bool { index == 0 }
+    public var currentWordLength: Int { index }
+
+    // MARK: - Tiện ích tương thích thuộc tính kiểu Bool
+    public var isQuickTelexEnabled: Bool {
+        get { vQuickTelex == 1 }
+        set { vQuickTelex = newValue ? 1 : 0 }
+    }
+    public var isSpellingCheckEnabled: Bool {
+        get { vCheckSpelling == 1 }
+        set { vCheckSpelling = newValue ? 1 : 0 }
+    }
+    public var isRestoreIfWrongSpellingEnabled: Bool {
+        get { vRestoreIfWrongSpelling == 1 }
+        set { vRestoreIfWrongSpelling = newValue ? 1 : 0 }
+    }
+    public var isQuickStartConsonantEnabled: Bool {
+        get { vQuickStartConsonant == 1 }
+        set { vQuickStartConsonant = newValue ? 1 : 0 }
+    }
+    public var isQuickEndConsonantEnabled: Bool {
+        get { vQuickEndConsonant == 1 }
+        set { vQuickEndConsonant = newValue ? 1 : 0 }
+    }
+    public var isAllowConsonantZFWJEnabled: Bool {
+        get { vAllowConsonantZFWJ == 1 }
+        set { vAllowConsonantZFWJ = newValue ? 1 : 0 }
+    }
+    public var isModernToneBalancingEnabled: Bool {
+        get { vUseModernOrthography == 0 }
+        set { vUseModernOrthography = newValue ? 0 : 1 }
+    }
+    public var isZKeyRemoveToneEnabled: Bool = true
+    public var isBracketShortcutsEnabled: Bool = true
+    public var isWAtWordBeginningEnabled: Bool = true
+    public var isAutoUndoEnabled: Bool = true
 
     // MARK: - Bộ đệm và Trạng thái Nội bộ
     public var hookState = OpenKeyHookState()
@@ -116,6 +153,31 @@ public final class OpenKeyEngine: @unchecked Sendable {
         hookState = OpenKeyHookState()
     }
 
+    /// Trích xuất từ hiện tại đang được lưu trong buffer typingWord
+    public func getCurrentWord() -> String {
+        guard index > 0 else { return "" }
+        var result = ""
+        for i in 0..<index {
+            let code = getCharacterCode(typingWord[i])
+            if (code & OpenKeyMask.pureCharacter) != 0 {
+                let scalarVal = code & ~OpenKeyMask.pureCharacter
+                if let scalar = UnicodeScalar(scalarVal) {
+                    result.append(Character(scalar))
+                }
+            } else if (code & OpenKeyMask.charCode) != 0 {
+                let scalarVal = code & 0xFFFF
+                if let scalar = UnicodeScalar(scalarVal) {
+                    result.append(Character(scalar))
+                }
+            } else {
+                if let ch = OpenKeyVietnameseData.keyCodeToCharacter(code) {
+                    result.append(ch)
+                }
+            }
+        }
+        return result
+    }
+
     @inline(__always)
     private func chr(_ idx: Int) -> UInt16 {
         return UInt16(typingWord[idx] & OpenKeyMask.charMask)
@@ -123,6 +185,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
 
     @inline(__always)
     private func isKeyZ(_ key: UInt16) -> Bool {
+        guard isZKeyRemoveToneEnabled else { return false }
         return processingChar[vInputType.rawValue][10] == key
     }
 
@@ -209,7 +272,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
         let prev = chr(index - 1)
         return (code == OpenKeyCode.c || code == OpenKeyCode.g || code == OpenKeyCode.k ||
                 code == OpenKeyCode.n || code == OpenKeyCode.q || code == OpenKeyCode.p ||
-                code == OpenKeyCode.t) && prev == code
+                code == OpenKeyCode.t || code == OpenKeyCode.u) && prev == code
     }
 
     private func setKeyData(_ idx: Int, _ keyCode: UInt16, _ caps: Bool) {
@@ -410,7 +473,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
     }
 
     // MARK: - Tìm và Tính toán Nguyên Âm (findAndCalculateVowel - L560)
-    private func findAndCalculateVowel(forGrammar: Bool = false) {
+    private func findAndCalculateVowel() {
         vowelCount = 0
         vowelStartIndex = 0
         vowelEndIndex = 0
@@ -423,22 +486,15 @@ public final class OpenKeyEngine: @unchecked Sendable {
                     if vowelCount == 0 {
                         vowelEndIndex = iii
                     }
-                    if !forGrammar {
-                        if (iii - 1 >= 0 && (chr(iii) == OpenKeyCode.i && chr(iii - 1) == OpenKeyCode.g)) ||
-                           (iii - 1 >= 0 && (chr(iii) == OpenKeyCode.u && chr(iii - 1) == OpenKeyCode.q)) {
-                            break
-                        }
+                    if vowelCount > 0 && iii - 1 >= 0 &&
+                        ((chr(iii) == OpenKeyCode.i && chr(iii - 1) == OpenKeyCode.g) ||
+                         (chr(iii) == OpenKeyCode.u && chr(iii - 1) == OpenKeyCode.q)) {
+                        break
                     }
                     vowelStartIndex = iii
                     vowelCount += 1
                 }
             }
-        }
-
-        // Không tính "u" trong "qu" là nguyên âm
-        if vowelStartIndex - 1 >= 0 && chr(vowelStartIndex) == OpenKeyCode.u && chr(vowelStartIndex - 1) == OpenKeyCode.q {
-            vowelStartIndex += 1
-            if vowelCount > 0 { vowelCount -= 1 }
         }
     }
 
@@ -575,19 +631,22 @@ public final class OpenKeyEngine: @unchecked Sendable {
 
     // MARK: - Chèn Dấu Thanh (insertMark - L753)
     public func insertMark(_ markMask: UInt32, canModifyFlag: Bool = true) {
+        let savedHookState = hookState
         vowelCount = 0
         if canModifyFlag {
             hookState.code = .vWillProcess
+            hookState.backspaceCount = 0
+            hookState.newCharCount = 0
         }
-        hookState.backspaceCount = 0
-        hookState.newCharCount = 0
 
         findAndCalculateVowel()
         vowelWillSetMark = 0
 
         if vowelCount == 1 {
             vowelWillSetMark = vowelEndIndex
-            hookState.backspaceCount = UInt8(index - vowelEndIndex)
+            if canModifyFlag {
+                hookState.backspaceCount = UInt8(index - vowelEndIndex)
+            }
         } else {
             if vUseModernOrthography == 0 {
                 handleOldMark()
@@ -605,29 +664,36 @@ public final class OpenKeyEngine: @unchecked Sendable {
             typingWord[vowelWillSetMark] &= ~OpenKeyMask.mark
             if canModifyFlag {
                 hookState.code = .vRestore
+                for ii in vowelStartIndex..<index {
+                    typingWord[ii] &= ~OpenKeyMask.mark
+                    hookState.charData[kk] = getCharacterCode(typingWord[ii])
+                    kk -= 1
+                }
+                hookState.backspaceCount = UInt8(index - vowelStartIndex)
+                hookState.newCharCount = hookState.backspaceCount
             }
-            for ii in vowelStartIndex..<index {
-                typingWord[ii] &= ~OpenKeyMask.mark
-                hookState.charData[kk] = getCharacterCode(typingWord[ii])
-                kk -= 1
-            }
-            hookState.backspaceCount = UInt8(index - vowelStartIndex)
             tempDisableKey = true
         } else {
             // Xóa dấu cũ và thêm dấu mới
             typingWord[vowelWillSetMark] &= ~OpenKeyMask.mark
             typingWord[vowelWillSetMark] |= markMask
 
-            for ii in vowelStartIndex..<index {
-                if ii != vowelWillSetMark {
-                    typingWord[ii] &= ~OpenKeyMask.mark
+            if canModifyFlag {
+                for ii in vowelStartIndex..<index {
+                    if ii != vowelWillSetMark {
+                        typingWord[ii] &= ~OpenKeyMask.mark
+                    }
+                    hookState.charData[kk] = getCharacterCode(typingWord[ii])
+                    kk -= 1
                 }
-                hookState.charData[kk] = getCharacterCode(typingWord[ii])
-                kk -= 1
+                hookState.backspaceCount = UInt8(index - vowelStartIndex)
+                hookState.newCharCount = hookState.backspaceCount
             }
-            hookState.backspaceCount = UInt8(index - vowelStartIndex)
         }
-        hookState.newCharCount = hookState.backspaceCount
+
+        if !canModifyFlag {
+            hookState = savedHookState
+        }
     }
 
     // MARK: - Chèn chữ Đ (insertD - L808)
@@ -800,7 +866,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
 
     // MARK: - Gỡ Dấu (removeMark - L587)
     public func removeMark() {
-        findAndCalculateVowel(forGrammar: true)
+        findAndCalculateVowel()
         isChanged = false
         if index > 0 && vowelStartIndex <= vowelEndIndex && vowelEndIndex < index {
             for i in vowelStartIndex...vowelEndIndex {
@@ -827,24 +893,48 @@ public final class OpenKeyEngine: @unchecked Sendable {
     public func checkGrammar(deltaBackSpace: Int) {
         if index <= 1 || index >= MAX_BUFF { return }
 
-        findAndCalculateVowel(forGrammar: true)
+        findAndCalculateVowel()
         if vowelCount == 0 { return }
 
         isCheckedGrammar = false
         let l = vowelStartIndex
 
-        // Trường hợp thêm n, c, i, m, p, t sau "uo" -> đồng bộ cả 2 thành "ươ"
+        // Trường hợp thêm n, c, i, m, p, t, u sau "uo" -> đồng bộ cả 2 thành "ươ"
         if index >= 3 {
             for i in stride(from: index - 1, through: 0, by: -1) {
                 let ch = chr(i)
                 if ch == OpenKeyCode.n || ch == OpenKeyCode.c || ch == OpenKeyCode.i ||
-                   ch == OpenKeyCode.m || ch == OpenKeyCode.p || ch == OpenKeyCode.t {
+                   ch == OpenKeyCode.m || ch == OpenKeyCode.p || ch == OpenKeyCode.t || ch == OpenKeyCode.u {
                     if i - 2 >= 0 && chr(i - 1) == OpenKeyCode.o && chr(i - 2) == OpenKeyCode.u {
                         let w1 = (typingWord[i - 1] & OpenKeyMask.toneW) != 0
                         let w2 = (typingWord[i - 2] & OpenKeyMask.toneW) != 0
                         if w1 != w2 {
                             typingWord[i - 2] |= OpenKeyMask.toneW
                             typingWord[i - 1] |= OpenKeyMask.toneW
+                            isCheckedGrammar = true
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        // Simple Telex: tự động thêm mũ cho ie -> iê và uo -> uô khi có phụ âm cuối
+        if (vInputType == .simpleTelex1 || vInputType == .simpleTelex2) && index >= 3 {
+            for i in stride(from: index - 1, through: 2, by: -1) {
+                let ch = chr(i)
+                if OpenKeyCode.isConsonant(ch) {
+                    if chr(i - 1) == OpenKeyCode.e && chr(i - 2) == OpenKeyCode.i {
+                        if (typingWord[i - 1] & OpenKeyMask.tone) == 0 {
+                            typingWord[i - 1] |= OpenKeyMask.tone
+                            isCheckedGrammar = true
+                            break
+                        }
+                    }
+                    if chr(i - 1) == OpenKeyCode.o && chr(i - 2) == OpenKeyCode.u {
+                        if (typingWord[i - 1] & (OpenKeyMask.tone | OpenKeyMask.toneW)) == 0 &&
+                           (typingWord[i - 2] & (OpenKeyMask.tone | OpenKeyMask.toneW)) == 0 {
+                            typingWord[i - 1] |= OpenKeyMask.tone
                             isCheckedGrammar = true
                             break
                         }
@@ -969,6 +1059,18 @@ public final class OpenKeyEngine: @unchecked Sendable {
     }
 
     private func handleQuickTelex(_ data: UInt16, _ isCaps: Bool) {
+        if data == OpenKeyCode.u {
+            typingWord[index - 1] = UInt32(OpenKeyCode.u) | OpenKeyMask.toneW | (isCaps ? OpenKeyMask.caps : 0)
+            let secondChar = UInt32(OpenKeyCode.o) | OpenKeyMask.toneW | (isCaps ? OpenKeyMask.caps : 0)
+            insertKey(OpenKeyCode.o, isCaps: isCaps, isCheckSpelling: false)
+            typingWord[index - 1] = secondChar
+            hookState.code = .vWillProcess
+            hookState.backspaceCount = 1
+            hookState.newCharCount = 2
+            hookState.charData[1] = getCharacterCode(typingWord[index - 2])
+            hookState.charData[0] = getCharacterCode(typingWord[index - 1])
+            return
+        }
         guard let mapping = OpenKeyVietnameseData.quickTelex[UInt32(data)] else { return }
         hookState.code = .vWillProcess
         hookState.backspaceCount = 1
@@ -1124,13 +1226,17 @@ public final class OpenKeyEngine: @unchecked Sendable {
         }
 
         if data == OpenKeyCode.leftBracket {
-            checkForStandaloneChar(data, isCaps, UInt32(OpenKeyCode.o))
-            return
+            if isBracketShortcutsEnabled {
+                checkForStandaloneChar(data, isCaps, UInt32(OpenKeyCode.o))
+                return
+            }
         }
 
         if data == OpenKeyCode.rightBracket {
-            checkForStandaloneChar(data, isCaps, UInt32(OpenKeyCode.u))
-            return
+            if isBracketShortcutsEnabled {
+                checkForStandaloneChar(data, isCaps, UInt32(OpenKeyCode.u))
+                return
+            }
         }
 
         // Phím D
@@ -1246,11 +1352,109 @@ public final class OpenKeyEngine: @unchecked Sendable {
 
         if !isChanged {
             if data == OpenKeyCode.w && vInputType != .simpleTelex1 {
-                checkForStandaloneChar(data, isCaps, UInt32(OpenKeyCode.u))
+                if isWAtWordBeginningEnabled || index > 0 {
+                    checkForStandaloneChar(data, isCaps, UInt32(OpenKeyCode.u))
+                } else {
+                    insertKey(data, isCaps: isCaps)
+                }
             } else {
                 insertKey(data, isCaps: isCaps)
             }
         }
+
+        if (vQuickStartConsonant != 0 || vQuickEndConsonant != 0) && !tempDisableKey {
+            checkQuickConsonant()
+        }
+    }
+
+    private let quickStartConsonantMap: [UInt16: [UInt16]] = [
+        OpenKeyCode.f: [OpenKeyCode.p, OpenKeyCode.h],
+        OpenKeyCode.j: [OpenKeyCode.g, OpenKeyCode.i],
+        OpenKeyCode.w: [OpenKeyCode.q, OpenKeyCode.u]
+    ]
+
+    private let quickEndConsonantMap: [UInt16: [UInt16]] = [
+        OpenKeyCode.g: [OpenKeyCode.n, OpenKeyCode.g],
+        OpenKeyCode.h: [OpenKeyCode.n, OpenKeyCode.h],
+        OpenKeyCode.k: [OpenKeyCode.c, OpenKeyCode.h]
+    ]
+
+    @discardableResult
+    public func checkQuickConsonant() -> Bool {
+        if index <= 1 { return false }
+        var modified = false
+
+        let firstChar: UInt16 = {
+            let ch = chr(0)
+            if ch == OpenKeyCode.u && (typingWord[0] & OpenKeyMask.standalone) != 0 {
+                return OpenKeyCode.w
+            }
+            return ch
+        }()
+
+        if vQuickStartConsonant != 0,
+           let replacement = quickStartConsonantMap[firstChar],
+           index >= 2,
+           !OpenKeyCode.isConsonant(chr(1)) {
+            let origCount = index
+            let isFirstCaps = (typingWord[0] & OpenKeyMask.caps) != 0
+            let isSecondCaps = (typingWord[1] & OpenKeyMask.caps) != 0
+
+            if (firstChar == OpenKeyCode.j && chr(1) == OpenKeyCode.i) ||
+               (firstChar == OpenKeyCode.w && chr(1) == OpenKeyCode.u) {
+                typingWord[0] = UInt32(replacement[0]) | (isFirstCaps ? OpenKeyMask.caps : 0)
+                typingWord[1] = UInt32(replacement[1]) | ((isFirstCaps && isSecondCaps) ? OpenKeyMask.caps : 0)
+                hookState.code = .vWillProcess
+                hookState.backspaceCount = UInt8(origCount - 1)
+                hookState.newCharCount = 2
+                hookState.charData[1] = getCharacterCode(typingWord[0])
+                hookState.charData[0] = getCharacterCode(typingWord[1])
+                modified = true
+            } else {
+                if index < MAX_BUFF - 1 {
+                    index += 1
+                }
+                for i in stride(from: index - 1, through: 2, by: -1) {
+                    typingWord[i] = typingWord[i - 1]
+                }
+                typingWord[1] = UInt32(replacement[1]) | ((isFirstCaps && isSecondCaps) ? OpenKeyMask.caps : 0)
+                typingWord[0] = UInt32(replacement[0]) | (isFirstCaps ? OpenKeyMask.caps : 0)
+
+                hookState.code = .vWillProcess
+                hookState.backspaceCount = UInt8(origCount - 1)
+                hookState.newCharCount = UInt8(index)
+                for i in 0..<index {
+                    hookState.charData[index - 1 - i] = getCharacterCode(typingWord[i])
+                }
+                modified = true
+            }
+        }
+
+        if vQuickEndConsonant != 0,
+           index >= 2,
+           !OpenKeyCode.isConsonant(chr(index - 2)),
+           let replacement = quickEndConsonantMap[chr(index - 1)] {
+            let isLastCaps = (typingWord[index - 1] & OpenKeyMask.caps) != 0
+
+            if index < MAX_BUFF - 1 {
+                index += 1
+            }
+            typingWord[index - 1] = UInt32(replacement[1]) | (isLastCaps ? OpenKeyMask.caps : 0)
+            typingWord[index - 2] = UInt32(replacement[0]) | (isLastCaps ? OpenKeyMask.caps : 0)
+
+            hookState.code = .vWillProcess
+            hookState.backspaceCount = 0
+            hookState.newCharCount = 2
+            hookState.charData[1] = getCharacterCode(typingWord[index - 2])
+            hookState.charData[0] = getCharacterCode(typingWord[index - 1])
+            modified = true
+        }
+
+        if modified {
+            hasHandleQuickConsonant = true
+            return true
+        }
+        return false
     }
 
     // MARK: - Vòng Lặp Xử Lý Sự Kiện Chính (vKeyHandleEvent - L1314)
@@ -1424,6 +1628,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
                 saveSpecialChar()
             }
 
+            hasHandleQuickConsonant = false
             insertState(data, isCaps)
 
             if !isSpecialKey(data) || tempDisableKey {
@@ -1434,8 +1639,10 @@ public final class OpenKeyEngine: @unchecked Sendable {
                     hookState.code = .vDoNothing
                     hookState.backspaceCount = 0
                     hookState.newCharCount = 0
-                    hookState.extCode = 3
                     insertKey(data, isCaps: isCaps)
+                    if (vQuickStartConsonant != 0 || vQuickEndConsonant != 0) && !tempDisableKey {
+                        checkQuickConsonant()
+                    }
                 }
             } else {
                 hookState.code = .vDoNothing
@@ -1444,7 +1651,7 @@ public final class OpenKeyEngine: @unchecked Sendable {
             }
 
             if vFreeMark == 0 && !isKeyD(data) {
-                if hookState.code == .vDoNothing {
+                if hookState.code == .vDoNothing || hasHandleQuickConsonant {
                     checkGrammar(deltaBackSpace: -1)
                 } else {
                     checkGrammar(deltaBackSpace: 0)

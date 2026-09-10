@@ -37,8 +37,14 @@ public final class GlideTrailLayer: CAShapeLayer {
     }
 
     private func redrawPath() {
-        guard points.count > 1 else {
+        guard let first = points.first else {
             path = nil
+            return
+        }
+
+        if points.count == 1 {
+            let dot = UIBezierPath(arcCenter: first, radius: lineWidth / 2.0, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+            path = dot.cgPath
             return
         }
 

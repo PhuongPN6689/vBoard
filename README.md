@@ -20,17 +20,32 @@ vBoard/
 ├── Sources/
 │   ├── vBoardEngine/                           # Lõi bộ gõ tiếng Việt độc lập
 │   │   ├── Models/
-│   │   │   ├── InputMethod.swift               # Kiểu gõ (Telex, VNI) & EngineAction
-│   │   │   └── VietnameseChar.swift            # Bảng mã nguyên âm O(1) compose/decompose
+│   │   │   ├── InputMethod.swift               # Kiểu gõ (Telex, VNI, Simple Telex)
+│   │   │   ├── VietnameseChar.swift            # Bảng mã nguyên âm & phụ âm O(1)
+│   │   │   └── vBoardSettings.swift            # Cấu hình tập trung App Group & Darwin IPC
+│   │   ├── OpenKey/                            # Lõi xử lý tiếng Việt OpenKey (100% Pure Swift)
+│   │   │   ├── OpenKeyEngine.swift             # FSM ngữ âm, bỏ dấu thanh/mũ, Quick Telex, gỡ dấu z
+│   │   │   ├── OpenKeyEngineAdapter.swift      # Adapter chuyển đổi giữa vBoard và OpenKey FSM
+│   │   │   ├── OpenKeyMacro.swift              # Macro gõ tắt, AutoCaps và viết tắt phụ âm
+│   │   │   ├── OpenKeyDataType.swift           # Định nghĩa cấu trúc dữ liệu, flags & kiểu gõ OpenKey
+│   │   │   └── OpenKeyVietnameseData.swift     # Bảng mã âm tiết, nguyên âm và phụ âm chuẩn OpenKey
 │   │   ├── Core/
-│   │   │   ├── VietnameseEngine.swift          # Xử lý quy tắc Telex/VNI, hoàn tác, cân bằng dấu
-│   │   │   └── VietnameseSyllable.swift        # Phân tích âm tiết & quy tắc đặt dấu mới/cũ
-│   │   └── ProxyAdapter/
-│   │       └── TextProxyAdapter.swift          # Cầu nối gửi lệnh deleteBackward & insertText
+│   │   │   └── AtomicTransaction.swift         # Quản lý giao dịch nguyên tử & lịch sử Undo/Redo
+│   │   ├── ProxyAdapter/
+│   │   │   └── TextProxyAdapter.swift          # Cầu nối gửi lệnh deleteBackward & insertText
+│   │   ├── Dictionary/
+│   │   │   ├── WordTrie.swift                  # Cây tiền tố Trie > 15.000 từ, gợi ý từ mềm (diacritic-agnostic)
+│   │   │   ├── NextWordPredictor.swift         # Dự đoán từ kế tiếp Bi-gram
+│   │   │   └── TextToEmojiMapper.swift         # Gợi ý biểu tượng cảm xúc Emoji thông minh
+│   │   ├── Shortcuts/
+│   │   │   └── ShortcutManager.swift           # Quản lý phím tắt gõ tắt cá nhân hóa
+│   │   └── Clipboard/
+│   │       └── ClipboardManager.swift          # Quản lý lịch sử bảng tạm an toàn
 │   │
 │   └── vBoardKeyboard/                         # Module Giao diện & Cử chỉ iOS (Pure UIKit)
 │       ├── Feedback/
-│       │   └── HapticManager.swift             # Pre-warmed Taptic Engine không độ trễ
+│       │   ├── HapticManager.swift             # Pre-warmed Taptic Engine không độ trễ
+│       │   └── SoundManager.swift              # Âm thanh gõ phím hệ thống
 │       ├── Models/
 │       │   └── KeyboardKey.swift               # Định nghĩa các loại phím & nhãn phụ
 │       ├── Gestures/
@@ -38,25 +53,35 @@ vBoard/
 │       │   └── BackspaceSwipeHandler.swift     # Cử chỉ vuốt Backspace sang trái xóa nhanh
 │       ├── Views/
 │       │   ├── KeyView.swift                   # View phím vẽ bằng CALayer, hỗ trợ nhấn giữ
-│       │   └── KeyboardView.swift              # Bàn phím layout tọa độ cực nhanh
+│       │   ├── KeyboardView.swift              # Bàn phím layout tọa độ cực nhanh
+│       │   ├── SuggestionBarView.swift         # Thanh gợi ý từ thông minh & biểu tượng nhanh
+│       │   ├── KeyCalloutView.swift            # Bong bóng phóng to phím khi chạm
+│       │   ├── KeyboardIcons.swift             # Bộ sinh biểu tượng Vector thuần UIKit (UIBezierPath)
+│       │   ├── QuickSettingsView.swift         # Menu cài đặt nhanh trên bàn phím
+│       │   ├── ClipboardView.swift             # Giao diện xem và dán nhanh lịch sử clipboard
+│       │   ├── TextEditingView.swift           # Bảng điều hướng con trỏ và chọn văn bản
+│       │   ├── EmojiPickerView.swift           # Bảng chọn Emoji phân loại theo chủ đề
+│       │   └── GlideTrailLayer.swift           # Vệt vuốt lướt gõ phím (Glide Typing)
 │       └── KeyboardViewController.swift        # Controller chính (UIInputViewController)
 │
 └── Tests/
-    └── main.swift                              # Bộ kiểm thử tự động toàn diện + Benchmark
+    ├── main.swift                              # Benchmark & kiểm thử độc lập
+    └── vBoardEngineTests/                      # Bộ 6 Suite kiểm thử tự động toàn diện (Swift Testing)
+        ├── ConfigurationMatrixTests.swift      # Ma trận cấu hình, giá trị mặc định & hoán vị đa cấu hình
+        ├── ComprehensiveDictionaryPermutationTests.swift # 1700+ permutations từ điển cao tần
+        ├── OpenKeyPermutationTests.swift       # Kiểm định 12 nhóm âm tiết & hoán vị gõ
+        ├── OpenKeyEngineTests.swift            # Kiểm thử chuyên sâu lõi OpenKey pure Swift
+        ├── DelayedHatTests.swift               # Kiểm thử trễ mũ/móc và thanh
+        └── VietnameseEngineTests.swift         # Kiểm thử tích hợp FSM, Proxy, Undo/Redo, Suggestion
 ```
 
 ---
 
 ## 🧪 Cách chạy Kiểm thử (Unit Tests & Benchmark)
 
-Chạy lệnh sau trong thư mục dự án:
+Chạy bộ kiểm thử tự động toàn diện (6 Suites, 70 Tests, > 2000 hoán vị âm tiết & cấu hình):
 ```bash
-TMPDIR=$PWD/.build/tmp CLANG_MODULE_CACHE_PATH=$PWD/.build/clang-cache swiftc \
-  -module-cache-path .build/swift-cache \
-  Sources/vBoardEngine/Models/*.swift \
-  Sources/vBoardEngine/Core/*.swift \
-  Sources/vBoardEngine/ProxyAdapter/*.swift \
-  Tests/main.swift -o .build/bin/test_runner && .build/bin/test_runner
+swift test
 ```
 
 ---

@@ -35,16 +35,21 @@
 ## 3. CÁC TÍNH NĂNG CHI TIẾT ĐƯỢC YÊU CẦU
 
 ### 3.1. Bộ gõ Tiếng Việt Siêu tốc (Vietnamese Engine Core)
-- **Thuật toán OpenKey State Machine:**
+- **Thuật toán OpenKey State Machine (100% Pure Swift):**
   - Máy trạng thái hữu hạn xử lý trực tiếp trên chuỗi ký tự đệm (buffer-based).
-  - Can thiệp thông minh qua `UITextDocumentProxy` bằng cơ chế `deleteBackward()` và `insertText()` chuẩn xác.
+  - Can thiệp thông minh qua `UITextDocumentProxy` bằng cơ chế `deleteBackward()` và `insertText()` chuẩn xác với tốc độ < 0.015ms.
 - **Phương pháp gõ:**
-  - Hỗ trợ đầy đủ **Telex** và **VNI**.
-  - **Đặt dấu thanh chuẩn mới (Modern Tone Balancing):** Tự động đặt dấu chuẩn xác trên các nguyên âm phức (`hóa`, `thủy`, `toán`, `tiến`).
+  - Hỗ trợ đầy đủ **Telex**, **Simple Telex** và **VNI**.
+  - **Tùy chọn phong cách đặt dấu thanh:**
+    - **Chuẩn mới (Khuyên dùng):** `hòa`, `thủy`, `toán`, `tiến` (`vUseModernOrthography = 0`).
+    - **Chuẩn cũ:** `hoà`, `thuỳ`, `toán`, `tiến` (`vUseModernOrthography = 1`).
 - **Các tính năng OpenKey nâng cao:**
+  - **Gõ chuẩn xác từ thực tế:** Xử lý hoàn hảo các chuỗi gõ như `moiws` $\to$ `mới`. Mặc định tắt Quick Telex để gõ chính xác các từ thương hiệu như `viettel` không bị biến dạng thành `viethel`.
   - **Phím `z` gỡ dấu:** Nhấn `z` ở cuối từ để trả từ về dạng không dấu (`toán` + `z` -> `toan`).
-  - **Quick Telex:** Gõ tắt `cc` -> `ch`, `gg` -> `gi`, `kk` -> `kh`, `nn` -> `ng`, `qq` -> `qu`, `pp` -> `ph`, `tt` -> `th`.
-  - **Gõ tắt dấu ngoặc `[` và `]`:** Bấm `[` ra `ơ`, `]` ra `ư`, `{` ra `Ơ`, `}` ra `Ư`.
+  - **Quick Telex (Tùy chọn):** Gõ tắt `cc` -> `ch`, `gg` -> `gi`, `kk` -> `kh`, `nn` -> `ng`, `qq` -> `qu`, `pp` -> `ph`, `tt` -> `th`.
+  - **Gõ tắt phụ âm đầu (Tùy chọn):** `f` -> `ph`, `j` -> `gi`, `w` -> `qu` (`fair -> phải`, `jair -> giải`, `wa -> qua`).
+  - **Gõ tắt phụ âm cuối (Tùy chọn):** `g` -> `ng`, `h` -> `nh`, `k` -> `ch` (`tog -> tong`, `tih -> tinh`, `tik -> tich`).
+  - **Gõ tắt dấu ngoặc `[` và `]`:** Bấm `[` ra `ơ`, `]` ra `ư`, `[[` ra `[`, `]]` ra `]`.
   - **Tự động biến đổi `w` đầu từ:** Nhấn `w` ở đầu từ tự động ra `ư` (`w` -> `ư`).
   - **Cơ chế hoàn tác (Undo):** Nhấn đúp phím dấu để khôi phục ký tự gốc (`aa` -> `â`, nhấn thêm `a` -> `aa`).
 
@@ -54,12 +59,15 @@
 - **Hàng 3 (`Shift` + `z .. m` + `⌫`):**
   - 7 phím chữ kèm nhãn phụ `* " ' : ; ! ?`.
   - **Phím Shift và phím Xóa (⌫):** Thiết kế kích thước mở rộng, **độ rộng bằng đúng phím `?123` và phím `↵` (Action Key)** ở Hàng 4, căn lề thẳng hàng dọc 100%.
-- **Hàng 4 (Hàng đáy hoàn thiện):**
-  - Bố cục: `[ ?123 ]  [ , (☺) ]  [ 🌐 / ☺ ]  [   Tiếng Việt   ]  [ . ]  [ ↵ / 🔍 ]`
+- **Hàng 4 (Hàng đáy hoàn thiện & Tinh gọn):**
+  - Bố cục: `[ ?123 ]  [ , (☺ vector) ]  [   Tiếng Việt (Space rộng rãi 4.8 weight)   ]  [ . ]  [ ↵ / 🔍 ]`
   - Đầy đủ phím phẩy `,` và phím chấm `.` hai bên Space.
-  - Phím phẩy có nhãn phụ `☺` (nhấn giữ gõ emoji).
+  - Phím phẩy có nhãn phụ icon vector `☺` (nhấn giữ hiển thị menu bong bóng chọn Emoji hoặc mở thẳng App Cài đặt `vboard://settings`).
+  - Loại bỏ các phím quả cầu `🌐` và phím mặt cười `☺` riêng lẻ ở hàng đáy để dành tối đa không gian cho phím Space, gõ thoải mái và hạn chế bấm nhầm.
   - Phím Space có nhãn mờ `Tiếng Việt`.
   - Phím Hành động / Enter: bo hình viên thuốc (pill shape), tự đổi biểu tượng (`🔍` khi tìm kiếm, `↵` khi xuống dòng thông thường, máy bay `✈` khi gửi tin nhắn).
+- **Phím Dán (Paste) Đa Năng & Lịch Sử Bảng Tạm:** Đặt cố định ở mạn phải thanh Toolbar. Chạm để dán trực tiếp từ clipboard, nhấn giữ để chuyển sang chế độ mở danh sách lịch sử bảng tạm.
+- **Chế độ Một tay Thông minh (One-Handed Mode):** Thu hẹp bàn phím còn 84%, có cột công cụ đảo bên và phóng to, tự động ghi nhớ hướng lệch gần nhất (trái hoặc phải) để khôi phục chính xác khi bật lại.
 - **Hàng phím số trên cùng (Number Row - Tuỳ chọn):** Bật/tắt trong cài đặt, hiển thị thanh mảnh ngay dưới thanh gợi ý.
 - **Bàn phím số chuyên dụng (Dedicated Number Pad):** Bố cục dạng lưới 4x4 thanh thoát, gọn gàng, tự kích hoạt khi nhập OTP / số điện thoại.
 - **Bàn phím Lập trình viên Chuyên dụng (Developer Mode):** Bố cục 4 hàng tối ưu cho lập trình (SSH, Termius, Markdown, SQL), cung cấp phím `Tab`, dấu ngoặc `{ } [ ] ( ) < > / \`, toán tử `->`, `=>`, `==`, `!=` và phím mũi tên `←` `→`. Tự động khóa bộ gõ tiếng Việt về ASCII chuẩn để chống gõ nhầm dấu khi viết code.
@@ -75,6 +83,7 @@
 ### 3.4. Gợi ý từ thông minh & Gõ lướt (Glide / Swipe Typing)
 - **Thanh gợi ý từ (Suggestion Bar):**
   - Hiển thị 3 từ tiếng Việt gợi ý phù hợp nhất theo thời gian thực.
+  - **Gợi ý mềm không dấu (Soft Suggestions / Diacritic-Agnostic):** Khi người dùng gõ chuỗi chưa có dấu (ví dụ: `nhu`), thanh gợi ý vẫn chủ động đề xuất các từ có dấu đầy đủ (`nhưng`, `như`, `những`, `nhu`) giúp chọn từ nhanh chóng.
   - Nút 4 ô vuông (`square.grid.2x2.fill`) bên trái mở nhanh Cài đặt và Bảng tạm.
   - Vạch ngăn cách dọc tinh tế giữa các từ.
 - **Gõ lướt cử chỉ (Glide Typing):**
