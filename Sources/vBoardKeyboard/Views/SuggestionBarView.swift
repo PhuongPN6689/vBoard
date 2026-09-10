@@ -146,7 +146,7 @@ public final class SuggestionBarView: UIView {
         // 3 nút gợi ý từ
         for i in 0..<3 {
             let btn = UIButton(type: .system)
-            btn.titleLabel?.font = (i == 1) ? UIFont.systemFont(ofSize: 15, weight: .semibold) : UIFont.systemFont(ofSize: 14, weight: .regular)
+            btn.titleLabel?.font = (i == 1) ? UIFont.systemFont(ofSize: 16.5, weight: .semibold) : UIFont.systemFont(ofSize: 15, weight: .regular)
             btn.setTitleColor(UIColor.label, for: .normal)
             btn.tag = i
             btn.addTarget(self, action: #selector(suggestionTapped(_:)), for: .touchUpInside)
@@ -311,8 +311,8 @@ public final class SuggestionBarView: UIView {
 
         separatorLayer.frame = CGRect(x: 0, y: barHeight - 0.5, width: barWidth, height: 0.5)
 
-        let flankWidth: CGFloat = 36.0
-        let rightFlankWidth: CGFloat = 36.0
+        let flankWidth: CGFloat = 38.0
+        let rightFlankWidth: CGFloat = 38.0
         menuButton.frame = CGRect(x: 4, y: 0, width: flankWidth, height: barHeight)
 
         // Nút Dán (Paste) luôn hiển thị cố định ở góc phải thanh công cụ
@@ -351,7 +351,7 @@ public final class SuggestionBarView: UIView {
 
             let availableToolsWidth = barWidth - flankWidth - rightFlankWidth - 12.0
             let count = CGFloat(toolViews.count)
-            let toolBtnWidth = min(46.0, availableToolsWidth / count)
+            let toolBtnWidth = min(48.0, availableToolsWidth / count)
             let startX = flankWidth + max(0, (availableToolsWidth - (toolBtnWidth * count)) / 2.0)
 
             for (idx, v) in toolViews.enumerated() {
@@ -366,9 +366,9 @@ public final class SuggestionBarView: UIView {
             let chipW = min(chipSize.width, maxChipW)
             smartChipButton.frame = CGRect(
                 x: flankWidth + (maxChipW - chipW) / 2.0,
-                y: (barHeight - 26.0) / 2.0,
+                y: (barHeight - 28.0) / 2.0,
                 width: chipW,
-                height: 26.0
+                height: 28.0
             )
         } else {
             let startX = flankWidth + 4.0
@@ -379,9 +379,9 @@ public final class SuggestionBarView: UIView {
             for (i, btn) in suggestionButtons.enumerated() {
                 btn.frame = CGRect(x: round(currentX), y: 0, width: round(cellWidth), height: barHeight)
                 if i == 0 {
-                    dividerLayer1.frame = CGRect(x: round(currentX + cellWidth), y: round((barHeight - 15) / 2), width: 1.0, height: 15)
+                    dividerLayer1.frame = CGRect(x: round(currentX + cellWidth), y: round((barHeight - 18) / 2), width: 1.0, height: 18)
                 } else if i == 1 {
-                    dividerLayer2.frame = CGRect(x: round(currentX + cellWidth), y: round((barHeight - 15) / 2), width: 1.0, height: 15)
+                    dividerLayer2.frame = CGRect(x: round(currentX + cellWidth), y: round((barHeight - 18) / 2), width: 1.0, height: 18)
                 }
                 currentX += cellWidth
             }

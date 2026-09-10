@@ -868,7 +868,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         var topPadding: CGFloat = 3.0
         if hasSuggestionBar {
-            let barHeight: CGFloat = 34.0
+            let barHeight: CGFloat = 42.0
             suggestionBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: barHeight)
             topPadding = barHeight + 3.0
         }

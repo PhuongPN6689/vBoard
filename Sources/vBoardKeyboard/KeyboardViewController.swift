@@ -152,7 +152,7 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             calculatedHeight += 28.0
         }
         if settings.isSuggestionBarEnabled && !keyboardView.isNumberPadActive {
-            calculatedHeight += 34.0
+            calculatedHeight += 42.0
         }
 
         if heightConstraint == nil {
