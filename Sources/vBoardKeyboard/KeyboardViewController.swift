@@ -22,6 +22,17 @@ final class NativeTextProxyWrapper: TextDocumentProxyProtocol {
         return proxy?.documentContextAfterInput
     }
 
+    var isSecureTextEntry: Bool {
+        return proxy?.isSecureTextEntry ?? false
+    }
+
+    var keyboardTypeRawValue: Int? {
+        if let type = proxy?.keyboardType {
+            return Int(type.rawValue)
+        }
+        return nil
+    }
+
     func deleteBackward() {
         proxy?.deleteBackward()
     }
@@ -43,6 +54,12 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
     private var proxyWrapper: NativeTextProxyWrapper!
 
     private var heightConstraint: NSLayoutConstraint?
+    /// Quản lý trạng thái từ vừa vuốt (Composing State)
+    private var isGlidedComposing: Bool = false
+    private var glidedWord: String? = nil
+    private var glidedPrefixSpaceCount: Int = 0
+    private var lastRecordedWord: String?
+    private var secondLastRecordedWord: String?
 
     open override func viewDidLoad() {
         super.viewDidLoad()
@@ -71,6 +88,15 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         HapticManager.shared.prepare()
         ActionHistoryManager.shared.onHistoryStateChanged = { [weak self] in
             self?.keyboardView.suggestionBar.updateHistoryButtons()
+        }
+
+        // Đảm bảo phím Globe luôn được kết nối với menu chuyển bàn phím hệ thống của Apple kể cả khi đổi layout
+        keyboardView.onGlobeKeyConfigured = { [weak self] globe in
+            guard let self = self else { return }
+            globe.addTarget(self, action: #selector(self.handleInputModeList(from:with:)), for: .allTouchEvents)
+        }
+        if let globe = keyboardView.globeKeyView {
+            globe.addTarget(self, action: #selector(handleInputModeList(from:with:)), for: .allTouchEvents)
         }
 
         // Lắng nghe tín hiệu Darwin IPC từ Host App Settings (< 0.1ms)
@@ -185,10 +211,9 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             keyboardView.setNumbersMode()
         }
 
-        // Tự động lưu mẩu văn bản vừa copy vào Bảng tạm và hiển thị Smart Quick Chip
-        if settings.isClipboardEnabled, UIPasteboard.general.hasStrings, let text = UIPasteboard.general.string {
-            ClipboardManager.shared.addClip(text)
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Hiển thị Smart Quick Chip từ lịch sử Bảng tạm nội bộ (không tự ý đọc UIPasteboard khi mở bàn phím - tuân thủ Guideline 5.1.1)
+        if settings.isClipboardEnabled, let lastClip = ClipboardManager.shared.getHistory().first {
+            let trimmed = lastClip.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 keyboardView.suggestionBar.smartClipText = trimmed
             }
@@ -224,15 +249,27 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         let currentWord = adapter.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
         if currentWord.isEmpty {
             var predictions: [String] = []
-            let trimmed = (proxyWrapper.documentContextBeforeInput ?? "").trimmingCharacters(in: .whitespaces)
-            let lastWord = adapter.extractCurrentWord(from: trimmed)
+            let rawBefore = proxyWrapper.documentContextBeforeInput ?? ""
+            let trimmed = rawBefore.trimmingCharacters(in: .whitespaces)
 
-            if !lastWord.isEmpty {
+            // Kiểm tra gợi ý mở đầu câu sau dấu ngắt câu ('.', '!', '?') hoặc khi bắt đầu câu mới
+            let isSentenceStart = trimmed.isEmpty || trimmed.hasSuffix(".") || trimmed.hasSuffix("!") || trimmed.hasSuffix("?")
+            if isSentenceStart {
                 if vBoardSettings.shared.isNextWordPredictionEnabled {
-                    predictions.append(contentsOf: NextWordPredictor.shared.predictNextWords(after: lastWord, limit: 3))
+                    predictions.append(contentsOf: NextWordPredictor.shared.predictSentenceStarters(limit: 3))
                 }
-                if vBoardSettings.shared.isTextToEmojiEnabled {
-                    predictions.append(contentsOf: TextToEmojiMapper.shared.emojis(for: lastWord))
+            } else {
+                let tokens = trimmed.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+                let lastWord = tokens.last.map { adapter.extractCurrentWord(from: $0) } ?? ""
+                let secondLastWord = tokens.count >= 2 ? adapter.extractCurrentWord(from: tokens[tokens.count - 2]) : nil
+
+                if !lastWord.isEmpty {
+                    if vBoardSettings.shared.isNextWordPredictionEnabled {
+                        predictions.append(contentsOf: NextWordPredictor.shared.predictNextWords(previousWord: lastWord, previousPreviousWord: secondLastWord, limit: 3))
+                    }
+                    if vBoardSettings.shared.isTextToEmojiEnabled {
+                        predictions.append(contentsOf: TextToEmojiMapper.shared.emojis(for: lastWord))
+                    }
                 }
             }
 
@@ -243,6 +280,10 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
                 keyboardView.suggestionBar.setSuggestions([])
             }
         } else {
+            let lowWord = currentWord.lowercased()
+            let isKnownWord = WordTrie.shared.containsExactWord(lowWord) && !UserAdaptiveLearningStore.shared.isBlacklisted(lowWord)
+            let newWordToSave: String? = (!isKnownWord && currentWord.count >= 2) ? currentWord : nil
+
             var suggestions = WordTrie.shared.suggest(prefix: currentWord, limit: 3)
             if vBoardSettings.shared.isTextToEmojiEnabled {
                 let emojis = TextToEmojiMapper.shared.emojis(for: currentWord)
@@ -256,7 +297,7 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
                 }
             }
             let formatted = suggestions.map { keyboardView.formatSuggestionText($0) }
-            keyboardView.suggestionBar.setSuggestions(formatted)
+            keyboardView.suggestionBar.setSuggestions(formatted, newWordToSave: newWordToSave)
         }
     }
 
@@ -300,6 +341,57 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
                     proxyWrapper.insertText(charStr)
                 }
             } else {
+                // Kiểm tra trạng thái từ vừa vuốt (Composing State)
+                if isGlidedComposing, let base = glidedWord, charStr.count == 1, let ch = charStr.first {
+                    let isPunctuation = [".", ",", "!", "?", ":", ";", ")", "]", "}", "-", "...", "/"].contains(charStr)
+                    if isPunctuation {
+                        // Gõ dấu câu ngay sau từ vừa vuốt -> Chốt từ vừa vuốt mà KHÔNG chèn dấu cách thừa
+                        UserAdaptiveLearningStore.shared.recordWordInput(base, previousWord: lastRecordedWord, previousPreviousWord: secondLastRecordedWord)
+                        if lastRecordedWord == nil || [".", "!", "?"].contains(lastRecordedWord) {
+                            UserAdaptiveLearningStore.shared.recordSentenceStartWord(base)
+                        }
+                        secondLastRecordedWord = lastRecordedWord
+                        lastRecordedWord = base
+                        isGlidedComposing = false
+                        glidedWord = nil
+                        glidedPrefixSpaceCount = 0
+                        adapter.adapter.reset()
+                    } else {
+                        let (isValid, combinedWord) = combineGlidedWord(base, with: ch)
+                        if isValid {
+                            // Ký tự gõ khiến từ hiện tại vẫn là tiếng Việt hợp lệ (thêm dấu thanh, nguyên âm đôi, âm cuối)
+                            for _ in 0..<base.count {
+                                proxyWrapper.deleteBackward()
+                            }
+                            proxyWrapper.insertText(combinedWord)
+                            isGlidedComposing = false
+                            glidedWord = nil
+                            glidedPrefixSpaceCount = 0
+                            adapter.adapter.reset()
+                            adapter.adapter.syncContextWord(combinedWord)
+                            updateWordSuggestions()
+                            return
+                        } else {
+                            // Ký tự gõ không thể ghép vào từ tiếng Việt hợp lệ -> Tự động chèn dấu cách và chốt từ cũ
+                            proxyWrapper.insertText(" ")
+                            UserAdaptiveLearningStore.shared.recordWordInput(base, previousWord: lastRecordedWord, previousPreviousWord: secondLastRecordedWord)
+                            if lastRecordedWord == nil || [".", "!", "?"].contains(lastRecordedWord) {
+                                UserAdaptiveLearningStore.shared.recordSentenceStartWord(base)
+                            }
+                            secondLastRecordedWord = lastRecordedWord
+                            lastRecordedWord = base
+                            isGlidedComposing = false
+                            glidedWord = nil
+                            glidedPrefixSpaceCount = 0
+                            adapter.adapter.reset()
+                        }
+                    }
+                } else {
+                    isGlidedComposing = false
+                    glidedWord = nil
+                    glidedPrefixSpaceCount = 0
+                }
+
                 // Tự động thêm dấu cách sau dấu câu nếu gõ chữ cái liền kề
                 if vBoardSettings.shared.isAutoSpaceAfterPunctuationEnabled {
                     let before = proxyWrapper.documentContextBeforeInput ?? ""
@@ -308,6 +400,15 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
                             proxyWrapper.insertText(" ")
                         }
                     }
+                }
+
+                // Nếu vừa chọn gợi ý (có dấu cách trailing) mà người dùng gõ dấu câu, tự động bỏ dấu cách để dấu câu bám sát vào từ (ví dụ 'vợ .' -> 'vợ.')
+                let isPunctuation = (charStr.count == 1 && [".", ",", "!", "?", ":", ";", ")", "]", "}"].contains(charStr))
+                if isPunctuation, let before = proxyWrapper.documentContextBeforeInput, before.hasSuffix(" ") {
+                    proxyWrapper.deleteBackward()
+                }
+                if [".", "!", "?"].contains(charStr) {
+                    lastRecordedWord = charStr
                 }
 
                 if charStr.count == 1, let firstChar = charStr.first {
@@ -319,11 +420,34 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             checkAutoCapitalization()
 
         case .space:
+            if isGlidedComposing, let base = glidedWord {
+                UserAdaptiveLearningStore.shared.recordWordInput(base, previousWord: lastRecordedWord, previousPreviousWord: secondLastRecordedWord)
+                if lastRecordedWord == nil || [".", "!", "?"].contains(lastRecordedWord) {
+                    UserAdaptiveLearningStore.shared.recordSentenceStartWord(base)
+                }
+                secondLastRecordedWord = lastRecordedWord
+                lastRecordedWord = base
+                isGlidedComposing = false
+                glidedWord = nil
+                glidedPrefixSpaceCount = 0
+                adapter.adapter.reset()
+            }
+            let currentWord = adapter.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
+            if !currentWord.isEmpty {
+                UserAdaptiveLearningStore.shared.recordWordInput(currentWord, previousWord: lastRecordedWord, previousPreviousWord: secondLastRecordedWord)
+                if lastRecordedWord == nil || [".", "!", "?"].contains(lastRecordedWord) {
+                    UserAdaptiveLearningStore.shared.recordSentenceStartWord(currentWord)
+                }
+                secondLastRecordedWord = lastRecordedWord
+                lastRecordedWord = currentWord
+            }
+
             let now = Date().timeIntervalSince1970
             if !keyboardView.isDeveloperModeActive && vBoardSettings.shared.isSpaceDoubleTapPeriodEnabled && (now - lastSpaceTapTime < 0.4) {
                 // Nhấn đúp Space nhanh -> Thay thế khoảng trắng vừa nhập bằng ". "
                 proxyWrapper.deleteBackward()
                 proxyWrapper.insertText(". ")
+                lastRecordedWord = "."
                 lastSpaceTapTime = 0
             } else {
                 adapter.handleSpace(proxy: proxyWrapper)
@@ -331,9 +455,28 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             }
 
         case .delete:
+            if isGlidedComposing, let base = glidedWord {
+                // Xóa trọn vẹn cả từ vừa vuốt VÀ khoảng trắng tiền tố tự động chèn trong 1 chạm
+                let totalCharsToDelete = base.count + glidedPrefixSpaceCount
+                for _ in 0..<totalCharsToDelete {
+                    proxyWrapper.deleteBackward()
+                }
+                isGlidedComposing = false
+                glidedWord = nil
+                glidedPrefixSpaceCount = 0
+                adapter.adapter.reset()
+                updateWordSuggestions()
+                return
+            }
+            isGlidedComposing = false
+            glidedWord = nil
+            glidedPrefixSpaceCount = 0
             adapter.handleBackspace(proxy: proxyWrapper)
 
         case .returnKey:
+            isGlidedComposing = false
+            glidedWord = nil
+            glidedPrefixSpaceCount = 0
             adapter.handleReturn(proxy: proxyWrapper)
 
         default:
@@ -364,13 +507,60 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
     }
 
     public func keyboardView(_ keyboardView: KeyboardView, didGlideWord word: String) {
-        let currentWord = adapter.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
-        for _ in 0..<currentWord.count {
-            proxyWrapper.deleteBackward()
+        let beforeText = proxyWrapper.documentContextBeforeInput ?? ""
+
+        // Nếu trước đó đang có một từ vừa vuốt (isGlidedComposing == true) và người dùng vuốt tiếp từ mới:
+        // Nghĩa là từ trước đã đúng ý người dùng -> Ta chốt từ trước và thêm khoảng trắng
+        if isGlidedComposing, let prevGlided = glidedWord {
+            UserAdaptiveLearningStore.shared.recordWordInput(prevGlided, previousWord: lastRecordedWord, previousPreviousWord: secondLastRecordedWord)
+            if lastRecordedWord == nil || [".", "!", "?"].contains(lastRecordedWord) {
+                UserAdaptiveLearningStore.shared.recordSentenceStartWord(prevGlided)
+            }
+            secondLastRecordedWord = lastRecordedWord
+            lastRecordedWord = prevGlided
+            isGlidedComposing = false
+            glidedWord = nil
+        } else {
+            // Người dùng đang gõ dở bằng phím thường (chưa cách) mà vuốt từ tiếp theo:
+            // Tuyệt đối KHÔNG xóa mất từ đang gõ! Hoàn thiện từ đang gõ bằng gợi ý tốt nhất (nếu có), thêm dấu cách và chốt từ.
+            let currentWord = adapter.extractCurrentWord(from: beforeText)
+            if !currentWord.isEmpty {
+                // Tra cứu từ gợi ý chuẩn nhất cho từ đang gõ dở (ví dụ 'nguo' -> 'người', 'viet' -> 'Việt')
+                let topSuggestion = WordTrie.shared.suggest(prefix: currentWord, limit: 1).first ?? keyboardView.suggestionBar.currentSuggestions.first
+                let committedWord: String
+
+                if let suggestion = topSuggestion, !suggestion.isEmpty, suggestion.lowercased() != currentWord.lowercased() {
+                    for _ in 0..<currentWord.count {
+                        proxyWrapper.deleteBackward()
+                    }
+                    let formatted = keyboardView.formatSuggestionText(suggestion)
+                    proxyWrapper.insertText(formatted)
+                    committedWord = formatted
+                } else {
+                    // Từ đang gõ đã hoàn chỉnh (ví dụ đã gõ 'người' hoặc từ riêng) -> Giữ nguyên
+                    committedWord = currentWord
+                }
+
+                UserAdaptiveLearningStore.shared.recordWordInput(committedWord, previousWord: lastRecordedWord, previousPreviousWord: secondLastRecordedWord)
+                if lastRecordedWord == nil || [".", "!", "?"].contains(lastRecordedWord) {
+                    UserAdaptiveLearningStore.shared.recordSentenceStartWord(committedWord)
+                }
+                secondLastRecordedWord = lastRecordedWord
+                lastRecordedWord = committedWord
+                adapter.adapter.reset()
+            }
         }
+
         let formattedWord = keyboardView.formatSuggestionText(word)
-        proxyWrapper.insertText(formattedWord + " ")
-        updateWordSuggestions()
+        let updatedBefore = proxyWrapper.documentContextBeforeInput ?? ""
+        let prefixSpace = (!updatedBefore.isEmpty && !updatedBefore.hasSuffix(" ") && !updatedBefore.hasSuffix("\n")) ? " " : ""
+
+        proxyWrapper.insertText(prefixSpace + formattedWord)
+        isGlidedComposing = true
+        glidedWord = formattedWord
+        glidedPrefixSpaceCount = prefixSpace.count
+        adapter.adapter.reset()
+
         keyboardView.resetShiftIfNeeded()
     }
 
@@ -390,17 +580,60 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
     // MARK: - SuggestionBarViewDelegate
 
     public func suggestionBar(_ bar: SuggestionBarView, didSelectWord word: String) {
-        let currentWord = adapter.extractCurrentWord(from: proxyWrapper.documentContextBeforeInput ?? "")
-        for _ in 0..<currentWord.count {
-            proxyWrapper.deleteBackward()
+        let beforeText = proxyWrapper.documentContextBeforeInput ?? ""
+
+        if isGlidedComposing, let currentGlided = glidedWord {
+            // 1. Người dùng chọn từ thay thế cho từ vừa vuốt
+            let totalCharsToDelete = currentGlided.count + glidedPrefixSpaceCount
+            for _ in 0..<totalCharsToDelete {
+                proxyWrapper.deleteBackward()
+            }
+            isGlidedComposing = false
+            glidedWord = nil
+            glidedPrefixSpaceCount = 0
+        } else {
+            let currentWord = adapter.extractCurrentWord(from: beforeText)
+            if !currentWord.isEmpty {
+                // 2. Nếu đang gõ dở một từ thông thường -> Xóa từ đang gõ dở
+                for _ in 0..<currentWord.count {
+                    proxyWrapper.deleteBackward()
+                }
+            }
+            // 3. Nếu con trỏ sau dấu cách (trạng thái đã chốt) -> Giữ nguyên từ trước, nối tiếp từ mới!
         }
+
         let formattedWord = keyboardView.formatSuggestionText(word)
-        proxyWrapper.insertText(formattedWord + " ")
-        keyboardView.suggestionBar.setSuggestions([])
+        let updatedBefore = proxyWrapper.documentContextBeforeInput ?? ""
+        let prefixSpace = (!updatedBefore.isEmpty && !updatedBefore.hasSuffix(" ") && !updatedBefore.hasSuffix("\n")) ? " " : ""
+
+        // Chèn từ mới kèm dấu cách để sẵn sàng cho từ tiếp theo
+        proxyWrapper.insertText(prefixSpace + formattedWord + " ")
+
+        // Ghi nhận vào bộ học thích ứng cá nhân
+        UserAdaptiveLearningStore.shared.recordWordInput(formattedWord, previousWord: lastRecordedWord, previousPreviousWord: secondLastRecordedWord)
+        if lastRecordedWord == nil || [".", "!", "?"].contains(lastRecordedWord) {
+            UserAdaptiveLearningStore.shared.recordSentenceStartWord(formattedWord)
+        }
+        secondLastRecordedWord = lastRecordedWord
+        lastRecordedWord = formattedWord
+
+        // Reset OpenKey engine để tránh lệch pha bộ đệm
+        adapter.adapter.reset()
+
+        // DUY TRÌ VÒNG LẶP GỢI Ý LIÊN TỤC: Cập nhật ngay dự đoán từ tiếp theo
+        updateWordSuggestions()
+        checkAutoCapitalization()
         keyboardView.resetShiftIfNeeded()
     }
 
     public func suggestionBarDidTapClipboard(_ bar: SuggestionBarView) {
+        guard self.hasFullAccess else {
+            keyboardView.suggestionBar.showToast("Cần bật 'Cho phép truy cập đầy đủ' để dùng Bảng tạm")
+            return
+        }
+        if UIPasteboard.general.hasStrings, let text = UIPasteboard.general.string, !text.isEmpty {
+            ClipboardManager.shared.addClip(text)
+        }
         keyboardView.showClipboardView(delegate: self)
     }
 
@@ -414,6 +647,33 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
 
     public func suggestionBarDidTapDeveloperMode(_ bar: SuggestionBarView) {
         keyboardView.setDeveloperMode(!keyboardView.isDeveloperModeActive)
+    }
+
+    public func suggestionBar(_ bar: SuggestionBarView, didRequestAddWord word: String) {
+        let cleanWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanWord.isEmpty else { return }
+        HapticManager.shared.playSpecialKey()
+        UserAdaptiveLearningStore.shared.addUserWordDirectly(cleanWord, frequency: 15)
+        WordTrie.shared.insert(word: cleanWord, frequency: 150)
+
+        // Sau khi lưu từ vào từ điển cá nhân, kết thúc từ hiện tại bằng dấu cách để gõ tiếp từ mới
+        let before = proxyWrapper.documentContextBeforeInput ?? ""
+        if !before.isEmpty && !before.hasSuffix(" ") && !before.hasSuffix("\n") {
+            proxyWrapper.insertText(" ")
+        }
+        lastRecordedWord = cleanWord
+        adapter.adapter.reset()
+        updateWordSuggestions()
+        checkAutoCapitalization()
+    }
+
+    public func suggestionBar(_ bar: SuggestionBarView, didRequestDeleteWord word: String) {
+        let cleanWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanWord.isEmpty else { return }
+        HapticManager.shared.playSpecialKey()
+        UserAdaptiveLearningStore.shared.blacklistWord(cleanWord)
+        UserAdaptiveLearningStore.shared.deleteUserWord(cleanWord)
+        updateWordSuggestions()
     }
 
 
@@ -447,7 +707,12 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
     }
 
     public func suggestionBarDidTapPaste(_ bar: SuggestionBarView) {
+        guard self.hasFullAccess else {
+            keyboardView.suggestionBar.showToast("Cần bật 'Cho phép truy cập đầy đủ' để dán")
+            return
+        }
         if UIPasteboard.general.hasStrings, let text = UIPasteboard.general.string, !text.isEmpty {
+            ClipboardManager.shared.addClip(text)
             HapticManager.shared.playKeyTap()
             proxyWrapper.insertText(text)
             updateWordSuggestions()
@@ -542,6 +807,44 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
 
     public func emojiPickerViewDidRequestSwitchToABC(_ view: EmojiPickerView) {
         keyboardView.hideEmojiPickerView()
+    }
+
+    /// Kết hợp từ vừa vuốt với một ký tự gõ tiếp theo để kiểm tra tính hợp lệ tiếng Việt
+    private func combineGlidedWord(_ baseWord: String, with char: Character) -> (isValid: Bool, combinedWord: String) {
+        // 1. Thử dùng OpenKeyEngineAdapter để xử lý ký tự gõ vào baseWord (cho phím dấu Telex/VNI và biến âm)
+        let testAdapter = OpenKeyEngineAdapter()
+        testAdapter.engine.vInputType = adapter.engine.vInputType
+        testAdapter.engine.vUseModernOrthography = adapter.engine.vUseModernOrthography
+        testAdapter.engine.vQuickTelex = adapter.engine.vQuickTelex
+        testAdapter.engine.vQuickStartConsonant = adapter.engine.vQuickStartConsonant
+        testAdapter.engine.vQuickEndConsonant = adapter.engine.vQuickEndConsonant
+        testAdapter.engine.vAllowConsonantZFWJ = adapter.engine.vAllowConsonantZFWJ
+
+        testAdapter.syncContextWord(baseWord)
+        let action = testAdapter.processKeystroke(char)
+
+        if action.deleteCount > 0 || !action.textToInsert.isEmpty {
+            let prefixKept = String(baseWord.dropLast(action.deleteCount))
+            let candidate = prefixKept + action.textToInsert
+            if candidate != baseWord && (WordTrie.shared.isValidVietnameseSyllable(candidate) || testAdapter.isValidVietnameseSpelling(candidate)) {
+                return (true, candidate)
+            }
+        }
+
+        // 2. Thử nối trực tiếp: baseWord + char (cho nguyên âm phụ hoặc phụ âm cuối, ví dụ "vợ" + "i" -> "vợi")
+        let directCandidate = baseWord + String(char)
+        if WordTrie.shared.isValidVietnameseSyllable(directCandidate) || testAdapter.isValidVietnameseSpelling(directCandidate) {
+            return (true, directCandidate)
+        }
+
+        return (false, "")
+    }
+}
+
+// MARK: - UIInputViewAudioFeedback Protocol
+extension KeyboardViewController: UIInputViewAudioFeedback {
+    public var enableInputClicksWhenVisible: Bool {
+        return true
     }
 }
 #endif

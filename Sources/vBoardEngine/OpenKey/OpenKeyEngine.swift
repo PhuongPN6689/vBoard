@@ -97,9 +97,9 @@ public final class OpenKeyEngine: @unchecked Sendable {
     private var hasHandleQuickConsonant: Bool = false
     private var willTempOffEngine: Bool = false
 
-    private var spellingOK: Bool = false
+    public private(set) var spellingOK: Bool = false
     private var spellingFlag: Bool = false
-    private var spellingVowelOK: Bool = false
+    public private(set) var spellingVowelOK: Bool = false
     private var spellingEndIndex: Int = 0
 
     // Bảng phím xử lý Telex / VNI / Simple Telex

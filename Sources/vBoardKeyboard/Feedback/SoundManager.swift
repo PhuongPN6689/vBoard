@@ -5,7 +5,8 @@ import AudioToolbox
 import vBoardEngine
 
 /// Quản lý âm thanh khi gõ phím với khả năng điều chỉnh âm lượng chuẩn xác theo soundVolume
-public final class SoundManager: @unchecked Sendable {
+@MainActor
+public final class SoundManager {
     public static let shared = SoundManager()
 
     private var audioPlayer: AVAudioPlayer?
@@ -59,6 +60,10 @@ public final class SoundManager: @unchecked Sendable {
         wavData.append(pcmData)
 
         do {
+            #if os(iOS)
+            try AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+            #endif
             let player = try AVAudioPlayer(data: wavData)
             player.prepareToPlay()
             self.audioPlayer = player
@@ -71,6 +76,9 @@ public final class SoundManager: @unchecked Sendable {
     public func playKeyClick() {
         guard vBoardSettings.shared.isKeySoundEnabled else { return }
 
+        // Gọi API tiêu chuẩn của iOS dành riêng cho bàn phím ảo (tuân thủ UIInputViewAudioFeedback)
+        UIDevice.current.playInputClick()
+
         let volume = max(0.05, min(1.0, vBoardSettings.shared.soundVolume))
         if let player = audioPlayer {
             if lastVolume != volume {
@@ -81,9 +89,6 @@ public final class SoundManager: @unchecked Sendable {
                 player.currentTime = 0
             }
             player.play()
-        } else {
-            // Fallback âm thanh click mặc định của hệ thống iOS
-            AudioServicesPlaySystemSound(1104)
         }
     }
 }

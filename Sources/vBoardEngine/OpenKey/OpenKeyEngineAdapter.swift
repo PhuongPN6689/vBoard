@@ -49,6 +49,32 @@ public final class OpenKeyEngineAdapter: @unchecked Sendable {
         }
     }
 
+    /// Kiểm tra xem một từ/âm tiết có tuân thủ đúng quy tắc chính tả và ngữ âm tiếng Việt của OpenKey hay không
+    public func isValidVietnameseSpelling(_ word: String) -> Bool {
+        let clean = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return false }
+        let tempEngine = OpenKeyEngine()
+        tempEngine.vInputType = engine.vInputType
+        tempEngine.vUseModernOrthography = engine.vUseModernOrthography
+        tempEngine.vCheckSpelling = 1
+        tempEngine.vRestoreIfWrongSpelling = 0
+        tempEngine.vQuickStartConsonant = engine.vQuickStartConsonant
+        tempEngine.vQuickEndConsonant = engine.vQuickEndConsonant
+        tempEngine.vAllowConsonantZFWJ = engine.vAllowConsonantZFWJ
+        let keystrokes = wordToKeystrokes(clean, inputType: tempEngine.vInputType)
+        for ch in keystrokes {
+            guard let mapping = OpenKeyVietnameseData.characterToKeyCode(ch) else { continue }
+            tempEngine.handleEvent(
+                event: .keyboard,
+                state: .keyDown,
+                data: mapping.keyCode,
+                capsStatus: mapping.isCaps ? 1 : 0
+            )
+        }
+        tempEngine.checkSpelling(forceCheckVowel: true)
+        return tempEngine.spellingOK && tempEngine.spellingVowelOK
+    }
+
     /// Phân rã từ tiếng Việt thành chuỗi phím gõ tương ứng của OpenKey
     private func wordToKeystrokes(_ word: String, inputType: OpenKeyInputType) -> String {
         var result = ""

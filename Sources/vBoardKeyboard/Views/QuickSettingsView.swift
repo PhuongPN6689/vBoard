@@ -23,7 +23,6 @@ public final class QuickSettingsView: UIView {
 
     // Toggle buttons
     private let numberRowButton = UIButton(type: .system)
-    private let hideGlobeButton = UIButton(type: .system)
     private let glideButton = UIButton(type: .system)
     private let suggestionButton = UIButton(type: .system)
 
@@ -101,14 +100,6 @@ public final class QuickSettingsView: UIView {
         setupToggleRow(button: numberRowButton, labelText: "Hàng số trên cùng (1..0):") { [weak self] in
             guard let self = self else { return }
             vBoardSettings.shared.isNumberRowEnabled.toggle()
-            HapticManager.shared.playKeyTap()
-            self.updateUIState()
-            self.delegate?.quickSettingsDidChangeConfiguration(self)
-        }
-
-        setupToggleRow(button: hideGlobeButton, labelText: "Ẩn nút quả cầu 🌐 (Mở rộng Space):") { [weak self] in
-            guard let self = self else { return }
-            vBoardSettings.shared.isGlobeKeyHidden.toggle()
             HapticManager.shared.playKeyTap()
             self.updateUIState()
             self.delegate?.quickSettingsDidChangeConfiguration(self)
@@ -244,7 +235,6 @@ public final class QuickSettingsView: UIView {
 
         // Cập nhật Toggle buttons
         updateToggleButton(numberRowButton, isOn: settings.isNumberRowEnabled)
-        updateToggleButton(hideGlobeButton, isOn: settings.isGlobeKeyHidden)
         updateToggleButton(glideButton, isOn: settings.isGlideTypingEnabled)
         updateToggleButton(suggestionButton, isOn: settings.isSuggestionBarEnabled)
         updateToggleButton(spellingCheckButton, isOn: settings.isSpellingCheckEnabled)
@@ -292,7 +282,6 @@ public final class QuickSettingsView: UIView {
 
         // Toggle rows
         curY = layoutToggleRow(button: numberRowButton, labelText: "Hàng số trên cùng (1..0):", startY: curY, width: contentW)
-        curY = layoutToggleRow(button: hideGlobeButton, labelText: "Ẩn nút quả cầu 🌐 (Mở rộng Space):", startY: curY, width: contentW)
 
         // Method
         if let methodLbl = scrollView.subviews.compactMap({ $0 as? UILabel }).first(where: { $0.text == "Kiểu gõ tiếng Việt:" }) {

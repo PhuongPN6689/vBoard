@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chính Sách Bảo Mật - vBoard iOS</title>
+    <style>
+        :root {
+            --primary: #007aff;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text: #1d1d1f;
+            --secondary-text: #6e6e73;
+            --border: #e5e5ea;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #000000;
+                --card-bg: #1c1c1e;
+                --text: #f5f5f7;
+                --secondary-text: #86868b;
+                --border: #38383a;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            padding: 24px 16px;
+        }
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 36px 32px;
+            border-radius: 18px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--border);
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin-top: 0;
+            color: var(--text);
+        }
+        h2 {
+            font-size: 19px;
+            font-weight: 600;
+            margin-top: 28px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+        p, li {
+            font-size: 15px;
+            color: var(--secondary-text);
+        }
+        strong {
+            color: var(--text);
+        }
+        .badge {
+            display: inline-block;
+            background: rgba(52, 199, 89, 0.15);
+            color: #34c759;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+        .highlight-box {
+            background: rgba(0, 122, 255, 0.08);
+            border-left: 4px solid var(--primary);
+            padding: 14px 18px;
+            border-radius: 8px;
+            margin: 18px 0;
+        }
+        .highlight-box p {
+            margin: 0;
+            font-size: 14px;
+        }
+        .footer {
+            margin-top: 36px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--secondary-text);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="badge">100% On-Device • Không Thu Thập Dữ Liệu</span>
+        <h1>Chính Sách Bảo Mật vBoard</h1>
+        <p><em>Có hiệu lực từ ngày 26 tháng 09 năm 2026</em></p>
+
+        <h2>1. Cam Kết Bảo Mật Cốt Lõi</h2>
+        <p>Bàn phím <strong>vBoard</strong> được thiết kế theo tôn chỉ bảo vệ tuyệt đối quyền riêng tư của người dùng:</p>
+        <ul>
+            <li><strong>Không ghi nhận phím gõ (Zero Keylogging):</strong> vBoard tuyệt đối không ghi nhận, không theo dõi và không lưu trữ lịch sử những gì bạn gõ (tài khoản, mật khẩu, tin nhắn, số thẻ tín dụng hoặc dữ liệu nhạy cảm).</li>
+            <li><strong>Hoạt động Ngoại tuyến Hoàn toàn (Zero Network):</strong> Ứng dụng và Keyboard Extension không chứa bất kỳ mã nguồn kết nối Internet, máy chủ từ xa, thư viện theo dõi (Tracker) hoặc SDK phân tích (Analytics SDK) nào. Toàn bộ thuật toán gõ tiếng Việt OpenKey và vuốt phím Glide chạy hoàn toàn cục bộ trên thiết bị.</li>
+            <li><strong>Lưu trữ Cục bộ An toàn (Local Only):</strong> Từ điển cá nhân và từ viết tắt chỉ được lưu trữ trong bộ nhớ an toàn (App Group Container) trên thiết bị của bạn và không bao giờ rời khỏi thiết bị.</li>
+        </ul>
+
+        <h2>2. Quyền Truy Cập Đầy Đủ (Allow Full Access)</h2>
+        <p>Hệ điều hành iOS hiển thị cảnh báo tiêu chuẩn mỗi khi bạn bật Full Access cho bất kỳ bàn phím bên thứ ba nào. Với <strong>vBoard</strong>, quyền này chỉ được dùng cho 2 mục đích duy nhất:</p>
+        <ol>
+            <li><strong>Rung phản hồi xúc giác (Taptic Engine):</strong> Kích hoạt <code>UIImpactFeedbackGenerator</code> tạo cảm giác gõ chân thực khi chạm phím.</li>
+            <li><strong>Nút Dán (Paste):</strong> Cho phép bạn chạm nút Dán trên thanh công cụ để chèn nội dung bạn vừa chủ động sao chép.</li>
+        </ol>
+        <div class="highlight-box">
+            <p><strong>Lưu ý:</strong> Nếu bạn không bật Full Access, vBoard vẫn hoạt động hoàn toàn bình thường cho tất cả các tính năng gõ tiếng Việt.</p>
+        </div>
+
+        <h2>3. Thu Thập & Chia Sẻ Dữ Liệu</h2>
+        <p>Chúng tôi <strong>KHÔNG</strong> thu thập, lưu trữ, bán hoặc chia sẻ bất kỳ dữ liệu cá nhân nào với bất kỳ ai.</p>
+
+        <h2>4. Liên Hệ Hỗ Trợ</h2>
+        <p>Nếu bạn có bất kỳ câu hỏi nào về chính sách bảo mật, vui lòng liên hệ:</p>
+        <p>• Email: <strong>support@vboard.app</strong><br>• Nhà phát triển: <strong>Nguyen Phuong</strong></p>
+
+        <div class="footer">
+            &copy; 2026 vBoard. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

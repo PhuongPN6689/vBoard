@@ -36,6 +36,28 @@ Thư mục này tập hợp đầy đủ toàn bộ tài liệu đặc tả yêu
    - Đề xuất giải pháp kiến trúc loại bỏ độ trễ và giật lag trên iOS.
    - Khai thác tối đa thuật toán Finite State Machine (FSM) và quy tắc âm tiết của GitHub OpenKey.
 
-6. **[assets/](assets/) & [images/](images/) - Kho hình ảnh & Mockups thiết kế:**
+6. **[DICTIONARY_AND_NGRAM_PIPELINE.md](DICTIONARY_AND_NGRAM_PIPELINE.md) - Kiến Trúc Bộ Từ Điển & Pipeline N-gram:**
+   - Triết lý gộp ký tự không dấu vào Unigram và bỏ khái niệm "từ ghép" tách rời để thống nhất vào Bigram/Trigram.
+   - Luồng dữ liệu và sơ đồ xử lý ngữ liệu văn bản thực tế (Corpus-driven).
+   - Hướng dẫn vận hành các script Python (`build_ngram_lexicon.py`, `download_corpus.py`) và chỉ số hiệu năng đạt được.
+
+7. **[assets/](assets/) & [images/](images/) - Kho hình ảnh & Mockups thiết kế:**
    - 15 ảnh chụp màn hình phân tích chi tiết mọi khía cạnh của Gboard.
    - Các ảnh chụp giao diện thực tế đối chiếu chuẩn Gboard và bản vẽ Vector App Icon.
+
+8. **[GLIDE_COMPOSING_AND_INTELLIGENT_SUGGESTION_SPEC.md](GLIDE_COMPOSING_AND_INTELLIGENT_SUGGESTION_SPEC.md) - Đặc Tả Kỹ Thuật Vuốt (Glide), Trạng Thái Soạn Thảo (Composing) & Gợi Ý Từ Thông Minh:**
+   - Máy trạng thái Soạn thảo (Composing FSM) chuẩn Gboard: Phân tách `Composing` vs `Committed`, giải quyết tận gốc lỗi nuốt chữ/sửa dấu hậu kỳ OpenKey.
+   - Cơ chế bảo vệ và hoàn tất từ gõ dở khi chuyển sang vuốt (`Typed-to-Glide Transition`).
+
+9. **[VIETNAMESE_ORTHOGRAPHY_SPEC.md](VIETNAMESE_ORTHOGRAPHY_SPEC.md) - Quy Chuẩn Ngữ Âm & Ma Trận Gõ Tiếng Việt:**
+   - Bảng mã nguyên âm/phụ âm, so sánh chuẩn đặt dấu Mới (`hòa, thủy`) vs Cũ (`hoà, thuỳ`).
+   - Ma trận 3 kiểu gõ (Telex, VNI, Simple Telex), các quy tắc gõ tắt OpenKey và 12 nhóm âm tiết kiểm thử chuẩn mực.
+
+10. **[DEBUGGING_AND_PROFILING.md](DEBUGGING_AND_PROFILING.md) - Hướng Dẫn Debug, Đo Lường RAM & Profile Hiệu Năng:**
+   - Hướng dẫn attach Xcode Debugger vào Keyboard Extension sandbox trên thiết bị thật.
+   - Kỹ thuật đo RAM và rò rỉ bộ nhớ (Allocations/Leaks Instruments) để giữ RAM < 15MB.
+   - Xem unified logs hạt nhân (`os_log`) và khắc phục sự cố Jetsam crash.
+   - Thẩm định âm tiết 2 tầng: OpenKey FSM Syllable Validation + WordTrie Dictionary.
+   - Mô hình suy diễn N-gram Stupid Backoff ($\beta = 0.4$, $\alpha_{\text{personal}} = 2.5$) và luật học thích nghi ($\ge 2$ lần/24h).
+   - Bộ công cụ trực quan hóa 4 tab Bảng điểm Từ điển (Dictionary Scores Explorer) trong Host App.
+

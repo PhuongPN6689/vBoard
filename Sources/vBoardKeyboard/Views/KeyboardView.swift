@@ -38,6 +38,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         }
     }
     public private(set) weak var globeKeyView: KeyView?
+    public var onGlobeKeyConfigured: ((KeyView) -> Void)?
     public private(set) var textEditingView: TextEditingView?
     public private(set) var quickSettingsView: QuickSettingsView?
     public private(set) var clipboardView: ClipboardView?
@@ -59,6 +60,18 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     private var lastGlidePoint: CGPoint = .zero
     private var lastGlideCompletedTimestamp: TimeInterval = 0
     private var glideInitialTouchPoint: CGPoint = .zero
+
+    // Glide Diagnostic & Playback properties
+    public var onGlideSessionFinished: ((_ samples: [GlideSample], _ primarySeq: [Character], _ fullSeq: [Character], _ matches: [String], _ stats: GlideSessionStats?) -> Void)?
+    private let playbackCursorView = UIView()
+    private var playbackDisplayLink: CADisplayLink?
+    private var playbackStartTime: CFTimeInterval = 0
+    private var playbackTotalDuration: CFTimeInterval = 0
+    private var playbackSamples: [GlideSample] = []
+    private var playbackSpeed: Double = 1.0
+    private var playbackProgressCallback: ((Double) -> Void)?
+    private var playbackCompletionCallback: (() -> Void)?
+    private var lastHighlightedKey: KeyView?
 
     private var lastShiftTapTime: TimeInterval = 0
     private var rowViews: [[KeyView]] = []
@@ -244,6 +257,20 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         calloutView.delegate = self
         addSubview(calloutView)
+
+        // Setup Playback Cursor
+        playbackCursorView.frame = CGRect(x: 0, y: 0, width: 24, height: 24)
+        playbackCursorView.layer.cornerRadius = 12
+        playbackCursorView.backgroundColor = UIColor.systemTeal.withAlphaComponent(0.85)
+        playbackCursorView.layer.borderColor = UIColor.white.cgColor
+        playbackCursorView.layer.borderWidth = 2.5
+        playbackCursorView.layer.shadowColor = UIColor.systemTeal.cgColor
+        playbackCursorView.layer.shadowOpacity = 0.9
+        playbackCursorView.layer.shadowRadius = 8
+        playbackCursorView.layer.shadowOffset = .zero
+        playbackCursorView.isHidden = true
+        playbackCursorView.isUserInteractionEnabled = false
+        addSubview(playbackCursorView)
 
         setupGlideGesture()
         buildCurrentLayout()
@@ -438,6 +465,9 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             isGlideTrackingActive = true
             glideTrackedChars.removeAll()
             glideTrailLayer.clear()
+            GlideKinematicsTracker.shared.reset()
+            let beginTime = CACurrentMediaTime()
+            GlideKinematicsTracker.shared.addSample(point: startPoint, timestamp: beginTime, keyChar: first)
 
             // Thêm ngay điểm chạm ban đầu vào vệt vẽ để không bao giờ bị thiếu điểm đầu
             if vBoardSettings.shared.isGlideTrailEnabled {
@@ -455,17 +485,27 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                curChar.isLetter,
                curChar != first {
                 glideTrackedChars.append(curChar)
+                GlideKinematicsTracker.shared.addSample(point: loc, timestamp: beginTime, keyChar: curChar)
             }
 
         case .changed:
             if !isGlideTrackingActive {
                 isGlideTrackingActive = true
                 cancelAllKeyLongPresses()
+                GlideKinematicsTracker.shared.reset()
             }
 
             if isGlideTrackingActive {
+                let now = CACurrentMediaTime()
                 if vBoardSettings.shared.isGlideTrailEnabled {
                     glideTrailLayer.addPoint(loc)
+                }
+
+                if let currentHit = findNearestKeyView(at: loc),
+                   case .character(let curStr) = currentHit.key.type,
+                   let curChar = curStr.first,
+                   curChar.isLetter {
+                    GlideKinematicsTracker.shared.addSample(point: loc, timestamp: now, keyChar: curChar)
                 }
 
                 // Nội suy các điểm giữa lastGlidePoint và loc để không bỏ sót phím khi vuốt nhanh
@@ -492,7 +532,8 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             }
 
         case .ended:
-            if isGlideTrackingActive && glideTrackedChars.count >= 2 {
+            if isGlideTrackingActive {
+                let now = CACurrentMediaTime()
                 // Đảm bảo phím cuối cùng tại điểm kết thúc được ghi nhận
                 if let lastHit = findNearestKeyView(at: loc),
                    case .character(let charStr) = lastHit.key.type,
@@ -501,15 +542,40 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                     if glideTrackedChars.last != lastChar {
                         glideTrackedChars.append(lastChar)
                     }
+                    GlideKinematicsTracker.shared.addSample(point: loc, timestamp: now, keyChar: lastChar)
                 }
 
-                let rawMatches = WordTrie.shared.matchGlide(keySequence: glideTrackedChars, limit: 3)
+                // Lấy chuỗi phím đã lọc bỏ các phím lướt qua (dựa trên profile vận tốc và góc đổi hướng)
+                let (primarySeq, fullSeq) = GlideKinematicsTracker.shared.extractTargetKeySequence()
+                var rawMatches = WordTrie.shared.matchGlide(keySequence: primarySeq, limit: 3)
+                if rawMatches.isEmpty && fullSeq != primarySeq {
+                    rawMatches = WordTrie.shared.matchGlide(keySequence: fullSeq, limit: 3)
+                }
+                if rawMatches.isEmpty && !glideTrackedChars.isEmpty {
+                    rawMatches = WordTrie.shared.matchGlide(keySequence: glideTrackedChars, limit: 3)
+                }
+
                 let matches = rawMatches.map { self.formatSuggestionText($0) }
+                let recordedSamples = GlideKinematicsTracker.shared.recordedSamples
+                let sessionStats = GlideKinematicsTracker.shared.lastSessionStats
+
+                onGlideSessionFinished?(recordedSamples, primarySeq, fullSeq, matches, sessionStats)
+
                 if let bestWord = matches.first {
                     HapticManager.shared.playSpecialKey()
                     delegate?.keyboardView(self, didGlideWord: bestWord)
                     suggestionBar.setSuggestions(matches)
                     resetShiftIfNeeded()
+
+                    // Ghi nhận telemetry tốc độ vuốt vào App Group để màn hình Benchmark và chẩn đoán đọc được
+                    if let stats = GlideKinematicsTracker.shared.lastSessionStats,
+                       let groupDefaults = UserDefaults(suiteName: vBoardSettings.appGroupSuiteName) {
+                        groupDefaults.set(stats.durationMs, forKey: "vboard_last_glide_duration_ms")
+                        groupDefaults.set(stats.avgVelocityPxPerSec, forKey: "vboard_last_glide_avg_velocity")
+                        groupDefaults.set(stats.peakVelocityPxPerSec, forKey: "vboard_last_glide_peak_velocity")
+                        groupDefaults.set(stats.totalDistancePx, forKey: "vboard_last_glide_distance_px")
+                        groupDefaults.set(Date().timeIntervalSince1970, forKey: "vboard_last_glide_timestamp")
+                    }
                 }
             }
             glideTrailLayer.fadeOut()
@@ -688,6 +754,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                     backspaceSwipeHandler?.attach(to: kv)
                 } else if case .globe = key.type {
                     globeKeyView = kv
+                    onGlobeKeyConfigured?(kv)
                 }
             }
             rowViews.append(viewsInRow)
@@ -737,16 +804,17 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         let isPeriodEnabled = settings.isPeriodKeyEnabled
 
         var row4: [KeyboardKey] = [
-            KeyboardKey.modeSwitch("?123", weight: 1.55)
+            KeyboardKey.modeSwitch("?123", weight: 1.3),
+            KeyboardKey.globe(weight: 1.0)
         ]
         if isCommaEnabled {
-            row4.append(KeyboardKey.char(",", secondary: "☺", weight: 1.15))
+            row4.append(KeyboardKey.char(",", secondary: "☺", weight: 1.0))
         }
-        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.8))
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.2))
         if isPeriodEnabled {
-            row4.append(KeyboardKey.char(".", weight: 1.15))
+            row4.append(KeyboardKey.char(".", weight: 1.0))
         }
-        row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.55))
+        row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5))
 
         rows.append(row1)
         rows.append(row2)
@@ -765,12 +833,13 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         r3.append(KeyboardKey.delete(weight: 1.55))
 
         let row4: [KeyboardKey] = [
-            KeyboardKey.modeSwitch("ABC", weight: 1.55),
+            KeyboardKey.modeSwitch("ABC", weight: 1.2),
+            KeyboardKey.globe(weight: 1.0),
             KeyboardKey.char(",", weight: 1.0),
             KeyboardKey.modeSwitch("12/34", weight: 1.0),
-            KeyboardKey.space(label: "Tiếng Việt", weight: 4.0),
+            KeyboardKey.space(label: "Tiếng Việt", weight: 3.5),
             KeyboardKey.char(".", weight: 1.0),
-            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.55)
+            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5)
         ]
 
         return [r1, r2, r3, row4]
@@ -785,12 +854,13 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         r3.append(KeyboardKey.delete(weight: 1.55))
 
         let row4: [KeyboardKey] = [
-            KeyboardKey.modeSwitch("ABC", weight: 1.55),
+            KeyboardKey.modeSwitch("ABC", weight: 1.2),
+            KeyboardKey.globe(weight: 1.0),
             KeyboardKey.char("←", weight: 1.0),
             KeyboardKey.modeSwitch("12/34", weight: 1.0),
-            KeyboardKey.space(label: "Tiếng Việt", weight: 4.0),
+            KeyboardKey.space(label: "Tiếng Việt", weight: 3.5),
             KeyboardKey.char("→", weight: 1.0),
-            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.55)
+            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5)
         ]
 
         return [r1, r2, r3, row4]
@@ -806,10 +876,11 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             KeyboardKey.delete(weight: 1.0)
         ]
         let r4: [KeyboardKey] = [
+            KeyboardKey.globe(weight: 0.9),
             KeyboardKey.modeSwitch("ABC", weight: 1.0),
-            KeyboardKey.char("0", weight: 1.0),
-            KeyboardKey.char(".", weight: 1.0),
-            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.0)
+            KeyboardKey.char("0", weight: 1.1),
+            KeyboardKey.char(".", weight: 0.9),
+            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.1)
         ]
 
         return [r1, r2, r3, r4]
@@ -1286,6 +1357,143 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     // MARK: - TextEditingViewDelegate
     public func textEditingViewDidRequestClose(_ view: TextEditingView) {
         hideTextEditingView()
+    }
+
+    // MARK: - Glide Playback Engine
+    @MainActor
+    public func startPlayback(
+        samples: [GlideSample],
+        speedMultiplier: Double = 1.0,
+        onProgress: ((Double) -> Void)? = nil,
+        onComplete: (() -> Void)? = nil
+    ) {
+        stopPlayback()
+        guard samples.count >= 2 else {
+            onComplete?()
+            return
+        }
+
+        playbackSamples = samples
+        playbackSpeed = max(0.1, speedMultiplier)
+        playbackProgressCallback = onProgress
+        playbackCompletionCallback = onComplete
+
+        let startT = samples.first?.timestamp ?? 0
+        let endT = samples.last?.timestamp ?? 0
+        playbackTotalDuration = max(0.05, endT - startT)
+        playbackStartTime = CACurrentMediaTime()
+
+        glideTrailLayer.clear()
+        playbackCursorView.center = samples[0].point
+        playbackCursorView.isHidden = false
+        bringSubviewToFront(playbackCursorView)
+
+        let dl = CADisplayLink(target: self, selector: #selector(handlePlaybackTick))
+        dl.add(to: .main, forMode: .common)
+        playbackDisplayLink = dl
+    }
+
+    @objc private func handlePlaybackTick() {
+        guard !playbackSamples.isEmpty else {
+            stopPlayback()
+            return
+        }
+
+        let now = CACurrentMediaTime()
+        let elapsed = (now - playbackStartTime) * playbackSpeed
+        let progress = min(1.0, elapsed / playbackTotalDuration)
+
+        let startT = playbackSamples.first!.timestamp
+        let targetSimT = startT + elapsed
+
+        let pt = samplePoint(at: targetSimT, in: playbackSamples)
+        playbackCursorView.center = pt
+        glideTrailLayer.addPoint(pt)
+
+        if let keyView = findNearestKeyView(at: pt) {
+            if keyView !== lastHighlightedKey {
+                lastHighlightedKey?.setTemporaryHighlight(false)
+                keyView.setTemporaryHighlight(true)
+                lastHighlightedKey = keyView
+            }
+        }
+
+        playbackProgressCallback?(progress)
+
+        if progress >= 1.0 {
+            stopPlayback()
+            playbackCompletionCallback?()
+        }
+    }
+
+    @MainActor
+    public func stopPlayback() {
+        playbackDisplayLink?.invalidate()
+        playbackDisplayLink = nil
+        lastHighlightedKey?.setTemporaryHighlight(false)
+        lastHighlightedKey = nil
+    }
+
+    @MainActor
+    public func resetPlaybackView() {
+        stopPlayback()
+        playbackCursorView.isHidden = true
+        glideTrailLayer.clear()
+    }
+
+    @MainActor
+    public func scrubPlayback(samples: [GlideSample], progress: Double) {
+        stopPlayback()
+        guard samples.count >= 2 else { return }
+
+        let clamped = max(0.0, min(1.0, progress))
+        let startT = samples.first!.timestamp
+        let endT = samples.last!.timestamp
+        let totalD = max(0.05, endT - startT)
+        let targetT = startT + (clamped * totalD)
+
+        playbackCursorView.isHidden = false
+        bringSubviewToFront(playbackCursorView)
+
+        glideTrailLayer.clear()
+        for s in samples {
+            if s.timestamp <= targetT {
+                glideTrailLayer.addPoint(s.point)
+            } else {
+                break
+            }
+        }
+
+        let pt = samplePoint(at: targetT, in: samples)
+        playbackCursorView.center = pt
+        glideTrailLayer.addPoint(pt)
+
+        if let keyView = findNearestKeyView(at: pt) {
+            if keyView !== lastHighlightedKey {
+                lastHighlightedKey?.setTemporaryHighlight(false)
+                keyView.setTemporaryHighlight(true)
+                lastHighlightedKey = keyView
+            }
+        }
+    }
+
+    private func samplePoint(at timestamp: CFTimeInterval, in samples: [GlideSample]) -> CGPoint {
+        guard let first = samples.first, let last = samples.last else { return .zero }
+        if timestamp <= first.timestamp { return first.point }
+        if timestamp >= last.timestamp { return last.point }
+
+        for i in 1..<samples.count {
+            let pPrev = samples[i - 1]
+            let pCurr = samples[i]
+            if pCurr.timestamp >= timestamp {
+                let dt = max(0.0001, pCurr.timestamp - pPrev.timestamp)
+                let factor = CGFloat((timestamp - pPrev.timestamp) / dt)
+                let x = pPrev.point.x + (pCurr.point.x - pPrev.point.x) * factor
+                let y = pPrev.point.y + (pCurr.point.y - pPrev.point.y) * factor
+                return CGPoint(x: x, y: y)
+            }
+        }
+        return last.point
     }
 }
 #endif

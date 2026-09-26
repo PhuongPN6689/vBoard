@@ -477,15 +477,10 @@ public final class vBoardSettings: @unchecked Sendable {
         }
     }
 
-    /// Ẩn hoàn toàn phím quả cầu để mở rộng tối đa phím Spacebar (mặc định: bật ẩn)
+    /// Phím chuyển đổi bàn phím hệ thống (Globe) luôn được hiển thị để tuân thủ Apple HIG Guideline 4.4.1
     public var isGlobeKeyHidden: Bool {
-        get {
-            if defaults.object(forKey: Keys.isGlobeKeyHidden) == nil { return true }
-            return defaults.bool(forKey: Keys.isGlobeKeyHidden)
-        }
-        set {
-            defaults.set(newValue, forKey: Keys.isGlobeKeyHidden)
-        }
+        get { false }
+        set { }
     }
 
     /// Hiển thị hàng phím số chuyên dụng ở trên cùng

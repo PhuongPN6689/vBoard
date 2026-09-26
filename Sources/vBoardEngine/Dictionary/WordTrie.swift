@@ -114,6 +114,7 @@ public final class WordTrie: @unchecked Sendable {
         glideBuckets.removeAll()
         totalWordsCount = 0
         isLoaded = false
+        NextWordPredictor.shared.resetLexiconPhrases()
         _ = loadFromLexiconFile(customFilePath: customPath)
     }
 
@@ -175,7 +176,11 @@ public final class WordTrie: @unchecked Sendable {
         let lowerPrefix = prefix.lowercased()
         let asciiPrefix = WordTrie.stripDiacritics(lowerPrefix)
 
-        let candidates: [(word: String, ascii: String, freq: Int)]
+        // 0. Kiểm tra ngay trong bảng Typo Cache O(1) cho các lỗi gõ sai và viết tắt kinh điển (nhwung, ko, bik, haowcj, đuowcj,...)
+        let cachedTypo = TypoCorrectionManager.shared.lookupCache(for: lowerPrefix) ??
+            (lowerPrefix != asciiPrefix ? TypoCorrectionManager.shared.lookupCache(for: asciiPrefix) : nil)
+
+        var candidates: [(word: String, ascii: String, freq: Int)] = []
 
         if lowerPrefix == asciiPrefix {
             // Trường hợp gõ không dấu (ví dụ: 'nhu', 'vi', 'viet'):
@@ -190,8 +195,9 @@ public final class WordTrie: @unchecked Sendable {
                     break
                 }
             }
-            guard uFound, !uCurrent.topCandidates.isEmpty else { return [] }
-            candidates = uCurrent.topCandidates
+            if uFound && !uCurrent.topCandidates.isEmpty {
+                candidates = uCurrent.topCandidates
+            }
         } else {
             // Trường hợp gõ có dấu (ví dụ: 'như', 'việt'):
             // Kết hợp kết quả từ cây có dấu chính xác và cây không dấu
@@ -228,8 +234,37 @@ public final class WordTrie: @unchecked Sendable {
                     mergedDict[item.word] = (ascii: item.ascii, freq: max(existingFreq, item.freq))
                 }
             }
-            guard !mergedDict.isEmpty else { return [] }
             candidates = mergedDict.map { (word: $0.key, ascii: $0.value.ascii, freq: $0.value.freq) }
+        }
+
+        // Bổ sung từ trong Typo Cache vào danh sách nếu có
+        if let cached = cachedTypo {
+            if !candidates.contains(where: { $0.word.lowercased() == cached.lowercased() }) {
+                candidates.insert((word: cached, ascii: WordTrie.stripDiacritics(cached), freq: 350), at: 0)
+            }
+        }
+
+        // Nếu cả cây có dấu và không dấu đều không tìm thấy ứng viên:
+        // KÍCH HOẠT 3 LỚP BẢO VỆ (3-LAYER PIPELINE)
+        if candidates.isEmpty {
+            // Lớp 1: Fast Typo Cache O(1)
+            if let cached = cachedTypo {
+                return [cached]
+            }
+
+            // Lớp 2: Telex Phonotactics Normalizer (Tái cấu trúc ngữ âm Telex đảo vị trí)
+            let normalized = TypoCorrectionManager.shared.normalizeTelexDisorder(input: lowerPrefix, trie: self)
+            if !normalized.isEmpty {
+                return Array(normalized.prefix(limit))
+            }
+
+            // Lớp 3: Spatial QWERTY Fuzzy Match (Sửa lỗi bấm nhầm phím kề cận trên bàn phím QWERTY)
+            let spatialMatches = TypoCorrectionManager.shared.spatialFuzzyMatch(query: lowerPrefix, trie: self, limit: limit)
+            if !spatialMatches.isEmpty {
+                return spatialMatches
+            }
+
+            return []
         }
 
         // Hệ thống tính điểm xếp hạng mềm (Soft Ranking)
@@ -241,8 +276,8 @@ public final class WordTrie: @unchecked Sendable {
             let lowWord = item.word.lowercased()
             let lowAsciiWord = item.ascii
 
-            // Điểm cơ bản dựa vào tần suất ngữ liệu
-            var score: Double = Double(item.freq) * 2.0
+            // Điểm cơ bản dựa vào tần suất ngữ liệu + điểm ưu tiên cá nhân hóa của người dùng
+            var score: Double = Double(item.freq) * 2.0 + UserAdaptiveLearningStore.shared.userBoost(for: item.word)
 
             // Thưởng khớp chính xác hoàn toàn từ có dấu
             if lowWord == lowerPrefix {
@@ -292,7 +327,203 @@ public final class WordTrie: @unchecked Sendable {
             }
         }
 
-        return finalWords
+        // Ưu tiên từ trong Typo Cache lên vị trí số 1 (ví dụ 'ko' -> 'không')
+        if let cached = cachedTypo {
+            if !finalWords.contains(where: { $0.lowercased() == cached.lowercased() }) {
+                finalWords.insert(cached, at: 0)
+                if finalWords.count > limit {
+                    finalWords.removeLast()
+                }
+            } else if let idx = finalWords.firstIndex(where: { $0.lowercased() == cached.lowercased() }), idx != 0 {
+                finalWords.remove(at: idx)
+                finalWords.insert(cached, at: 0)
+            }
+        }
+
+        // Fallback sửa lỗi chính tả & đảo phím Telex thông minh nếu không tìm thấy từ
+        if finalWords.isEmpty {
+            if let cached = cachedTypo {
+                return [cached]
+            }
+            let normalized = TypoCorrectionManager.shared.normalizeTelexDisorder(input: lowerPrefix, trie: self)
+            if !normalized.isEmpty {
+                return Array(normalized.prefix(limit))
+            }
+            let spatial = TypoCorrectionManager.shared.spatialFuzzyMatch(query: lowerPrefix, trie: self, limit: limit)
+            if !spatial.isEmpty {
+                return spatial
+            }
+        }
+        return finalWords.filter { !UserAdaptiveLearningStore.shared.isBlacklisted($0) }
+    }
+
+    /// Tra cứu tiền tố trực tiếp trên cây Trie (không gọi đệ quy sang TypoCorrectionManager)
+    public func lookupDirectPrefix(_ prefix: String, limit: Int = 3) -> [String] {
+        guard !prefix.isEmpty else { return [] }
+        let lowerPrefix = prefix.lowercased()
+        let asciiPrefix = WordTrie.stripDiacritics(lowerPrefix)
+
+        var mergedDict: [String: (ascii: String, freq: Int)] = [:]
+
+        // Tra cứu trên cây có dấu
+        var exactCurrent = root
+        var exactFound = true
+        for char in lowerPrefix {
+            if let next = exactCurrent.children[char] {
+                exactCurrent = next
+            } else {
+                exactFound = false
+                break
+            }
+        }
+        if exactFound {
+            for item in exactCurrent.topCandidates {
+                mergedDict[item.word] = (ascii: item.ascii, freq: item.freq)
+            }
+        }
+
+        // Tra cứu trên cây không dấu
+        var uCurrent = unaccentedRoot
+        var uFound = true
+        for char in asciiPrefix {
+            if let next = uCurrent.children[char] {
+                uCurrent = next
+            } else {
+                uFound = false
+                break
+            }
+        }
+        if uFound {
+            for item in uCurrent.topCandidates {
+                let existingFreq = mergedDict[item.word]?.freq ?? 0
+                mergedDict[item.word] = (ascii: item.ascii, freq: max(existingFreq, item.freq))
+            }
+        }
+
+        guard !mergedDict.isEmpty else { return [] }
+        let sorted = mergedDict.sorted {
+            let s0 = Double($0.value.freq) * 2.0 + UserAdaptiveLearningStore.shared.userBoost(for: $0.key)
+            let s1 = Double($1.value.freq) * 2.0 + UserAdaptiveLearningStore.shared.userBoost(for: $1.key)
+            if s0 != s1 { return s0 > s1 }
+            return $0.value.freq > $1.value.freq
+        }
+        let filtered = sorted.filter { !UserAdaptiveLearningStore.shared.isBlacklisted($0.key) }
+        return Array(filtered.prefix(limit).map { $0.key })
+    }
+
+    /// Tra cứu tiền tố trực tiếp trả về mảng tuple kèm tần suất (word, freq)
+    public func lookupDirectEntries(_ prefix: String, limit: Int = 5) -> [(word: String, freq: Int)] {
+        guard !prefix.isEmpty else { return [] }
+        let lowerPrefix = prefix.lowercased()
+        let asciiPrefix = WordTrie.stripDiacritics(lowerPrefix)
+
+        var mergedDict: [String: Int] = [:]
+
+        // Tra cứu trên cây có dấu
+        var exactCurrent = root
+        var exactFound = true
+        for char in lowerPrefix {
+            if let next = exactCurrent.children[char] {
+                exactCurrent = next
+            } else {
+                exactFound = false
+                break
+            }
+        }
+        if exactFound {
+            for item in exactCurrent.topCandidates {
+                mergedDict[item.word] = item.freq
+            }
+        }
+
+        // Tra cứu trên cây không dấu
+        var uCurrent = unaccentedRoot
+        var uFound = true
+        for char in asciiPrefix {
+            if let next = uCurrent.children[char] {
+                uCurrent = next
+            } else {
+                uFound = false
+                break
+            }
+        }
+        if uFound {
+            for item in uCurrent.topCandidates {
+                mergedDict[item.word] = max(mergedDict[item.word] ?? 0, item.freq)
+            }
+        }
+
+        guard !mergedDict.isEmpty else { return [] }
+        let sorted = mergedDict.sorted { $0.value > $1.value }
+        return Array(sorted.prefix(limit).map { ($0.key, $0.value) })
+    }
+
+    /// Kiểm tra xem một từ có tồn tại chính xác trong từ điển có dấu hay không
+    public func containsExactWord(_ word: String) -> Bool {
+        let clean = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !clean.isEmpty else { return false }
+        if UserAdaptiveLearningStore.shared.isBlacklisted(clean) {
+            return false
+        }
+        var current = root
+        for char in clean {
+            guard let next = current.children[char] else { return false }
+            current = next
+        }
+        return current.word != nil
+    }
+
+    /// Kiểm tra xem một từ có phải là từ/âm tiết tiếng Việt hợp lệ hay không (hoặc là tiền tố hợp lệ)
+    public func isValidVietnameseSyllable(_ word: String) -> Bool {
+        let clean = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !clean.isEmpty else { return false }
+
+        // 1. Có chính xác trong từ điển ngữ liệu hoặc từ điển cá nhân
+        if containsExactWord(clean) || UserAdaptiveLearningStore.shared.getUserWordFrequency(for: clean) > 0 {
+            return true
+        }
+
+        // 2. Tra cứu tiền tố chính xác trên cây có dấu (Exact Tree)
+        var exactCurrent = root
+        for char in clean {
+            guard let next = exactCurrent.children[char] else {
+                return false
+            }
+            exactCurrent = next
+        }
+        return exactCurrent.word != nil || !exactCurrent.topCandidates.isEmpty
+    }
+
+    /// Tra cứu từ điển 1 chữ kèm điểm tần suất phục vụ UI Explorer
+    public func searchUnigramWords(filter: String? = nil, limit: Int = 50) -> [(word: String, freq: Int)] {
+        let cleanFilter = filter?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let query = cleanFilter, !query.isEmpty {
+            return lookupDirectEntries(query, limit: limit)
+        } else {
+            let results = root.topCandidates.map { ($0.word, $0.freq) }
+            return Array(results.prefix(limit))
+        }
+    }
+
+    // MARK: - Toạ độ chuẩn hoá của bàn phím QWERTY (Row, Column)
+    private static let qwertyCoords: [Character: (row: Double, col: Double)] = [
+        "q": (0.0, 0.0), "w": (0.0, 1.0), "e": (0.0, 2.0), "r": (0.0, 3.0), "t": (0.0, 4.0),
+        "y": (0.0, 5.0), "u": (0.0, 6.0), "i": (0.0, 7.0), "o": (0.0, 8.0), "p": (0.0, 9.0),
+        "a": (1.0, 0.5), "s": (1.0, 1.5), "d": (1.0, 2.5), "f": (1.0, 3.5), "g": (1.0, 4.5),
+        "h": (1.0, 5.5), "j": (1.0, 6.5), "k": (1.0, 7.5), "l": (1.0, 8.5),
+        "z": (2.0, 1.5), "x": (2.0, 2.5), "c": (2.0, 3.5), "v": (2.0, 4.5), "b": (2.0, 5.5),
+        "n": (2.0, 6.5), "m": (2.0, 7.5)
+    ]
+
+    /// Đo khoảng cách hình học giữa 2 phím trên bàn phím QWERTY chuẩn
+    public static func qwertyKeyDistance(_ c1: Character, _ c2: Character) -> Double {
+        guard let p1 = qwertyCoords[Character(c1.lowercased())],
+              let p2 = qwertyCoords[Character(c2.lowercased())] else {
+            return 2.5
+        }
+        let dr = p1.row - p2.row
+        let dc = p1.col - p2.col
+        return sqrt(dr * dr + dc * dc)
     }
 
     /// Gợi ý từ theo quỹ đạo vuốt (Glide / Swipe Typing)
@@ -302,30 +533,48 @@ public final class WordTrie: @unchecked Sendable {
         let lowerSeq = keySequence.map { Character($0.lowercased()) }
         guard let firstChar = lowerSeq.first, let lastChar = lowerSeq.last else { return [] }
 
-        var bucketKeys: [GlideBucketKey] = [
-            GlideBucketKey(first: firstChar, last: lastChar)
-        ]
+        // 1. Luôn tra cứu bucket chính xác theo phím bắt đầu và phím kết thúc
+        let primaryKey = GlideBucketKey(first: firstChar, last: lastChar)
+        var candidates = scoreGlideEntries(in: [primaryKey], lowerSeq: lowerSeq, targetFirst: firstChar, targetLast: lastChar)
 
-        // Dự phòng khi ngón tay trượt quá mép phím cuối hoặc đầu
-        if lowerSeq.count >= 3 {
+        // 2. Chỉ khi bucket chính xác hoàn toàn không có từ nào, mới thử dự phòng
+        // Dự phòng A: Khi ngón tay trượt quá mép phím cuối
+        if candidates.isEmpty && lowerSeq.count >= 3 {
             let secondLast = lowerSeq[lowerSeq.count - 2]
             if secondLast != lastChar {
-                bucketKeys.append(GlideBucketKey(first: firstChar, last: secondLast))
-            }
-            let secondFirst = lowerSeq[1]
-            if secondFirst != firstChar {
-                bucketKeys.append(GlideBucketKey(first: secondFirst, last: lastChar))
+                let altEndKey = GlideBucketKey(first: firstChar, last: secondLast)
+                candidates = scoreGlideEntries(in: [altEndKey], lowerSeq: lowerSeq, targetFirst: firstChar, targetLast: secondLast)
             }
         }
 
-        var candidates: [(word: String, score: Int)] = []
+        // Dự phòng B: Khi ngón tay chạm phím đầu bị lệch nhẹ (chỉ tra cứu khi hoàn toàn không tìm thấy từ ở phím đầu)
+        if candidates.isEmpty && lowerSeq.count >= 3 {
+            let secondFirst = lowerSeq[1]
+            if secondFirst != firstChar {
+                let altStartKey = GlideBucketKey(first: secondFirst, last: lastChar)
+                candidates = scoreGlideEntries(in: [altStartKey], lowerSeq: lowerSeq, targetFirst: secondFirst, targetLast: lastChar)
+            }
+        }
+
+        candidates.sort { $0.score > $1.score }
+        return Array(candidates.prefix(limit).map { $0.word })
+    }
+
+    /// Chấm điểm các ứng viên trong các bucket được chỉ định
+    private func scoreGlideEntries(
+        in bucketKeys: [GlideBucketKey],
+        lowerSeq: [Character],
+        targetFirst: Character,
+        targetLast: Character
+    ) -> [(word: String, score: Double)] {
+        var candidates: [(word: String, score: Double)] = []
         var seen = Set<String>()
 
         for key in bucketKeys {
             guard let entries = glideBuckets[key] else { continue }
             for entry in entries {
                 let lowWord = entry.word.lowercased()
-                if seen.contains(lowWord) { continue }
+                if seen.contains(lowWord) || UserAdaptiveLearningStore.shared.isBlacklisted(lowWord) { continue }
 
                 // Kiểm tra xem entry.asciiChars có phải là dãy con (subsequence) của lowerSeq không
                 var sIdx = 0
@@ -343,29 +592,36 @@ public final class WordTrie: @unchecked Sendable {
                 }
 
                 if matched == entry.length {
-                    // Trọng số điểm (thích ứng tối ưu với dải tần suất 1 - 300):
-                    // 1. Độ dài từ: từ khớp nhiều điểm mốc ký tự trên quỹ đạo hơn được ưu tiên
-                    // 2. Thưởng lớn khi độ dài từ khớp chính xác số lượng phím được vuốt
-                    // 3. Tần suất xuất hiện (frequency) trong kho ngữ liệu tiếng Việt (1 - 300)
-                    // 4. Khớp chính xác điểm đầu và điểm kết thúc ngón tay
-                    var score = entry.frequency + entry.length * 80
-                    if entry.length == lowerSeq.count {
-                        score += 150
+                    let freq = max(1, entry.frequency)
+                    let logFreq = log10(Double(freq))
+                    let coverage = Double(entry.length) / Double(lowerSeq.count)
+                    let excessChars = Double(max(0, lowerSeq.count - entry.length))
+
+                    // Điểm xác suất ngôn ngữ + độ phủ cử chỉ + phạt ký tự thừa
+                    var score = logFreq * 35.0 + coverage * 90.0 - excessChars * 6.0 + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+
+                    // Phạt khoảng cách không gian (Spatial Distance Penalty) tới phím bắt đầu và kết thúc
+                    if let firstCh = entry.asciiChars.first {
+                        let startDist = Self.qwertyKeyDistance(firstCh, targetFirst)
+                        score -= startDist * 50.0
+                        if firstCh == targetFirst {
+                            score += 20.0
+                        }
                     }
-                    if entry.asciiChars.last == lastChar {
-                        score += 15
+                    if let lastCh = entry.asciiChars.last {
+                        let endDist = Self.qwertyKeyDistance(lastCh, targetLast)
+                        score -= endDist * 35.0
+                        if lastCh == targetLast {
+                            score += 20.0
+                        }
                     }
-                    if entry.asciiChars.first == firstChar {
-                        score += 15
-                    }
+
                     candidates.append((word: entry.word, score: score))
                     seen.insert(lowWord)
                 }
             }
         }
-
-        candidates.sort { $0.score > $1.score }
-        return Array(candidates.prefix(limit).map { $0.word })
+        return candidates
     }
 
     // MARK: - Bộ từ vựng tiếng Việt tần suất cao
@@ -504,18 +760,57 @@ public final class WordTrie: @unchecked Sendable {
     }
 
     private func parseAndInsertLines(_ content: String) {
-        let lines = content.components(separatedBy: .newlines)
-        for line in lines {
+        var unigramLines: [(String, Int)] = []
+        var phraseLines: [(String, Int)] = []
+        unigramLines.reserveCapacity(10000)
+        phraseLines.reserveCapacity(90000)
+
+        content.enumerateLines { line, _ in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return }
             let parts = trimmed.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: true)
+            let word: String
+            let freq: Int
             if parts.count == 2 {
-                let word = String(parts[0]).trimmingCharacters(in: .whitespaces)
-                let freq = Int(parts[1].trimmingCharacters(in: .whitespaces)) ?? 50
-                insert(word: word, frequency: freq)
+                word = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                freq = Int(parts[1].trimmingCharacters(in: .whitespaces)) ?? 50
             } else if parts.count == 1 {
-                let word = String(parts[0]).trimmingCharacters(in: .whitespaces)
-                insert(word: word, frequency: 50)
+                word = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                freq = 50
+            } else {
+                return
+            }
+
+            // KIẾN TRÚC TÁCH ĐÔI TỪ ĐIỂN:
+            // 1. Nếu là từ đơn (1 âm tiết, không chứa khoảng trắng): Nạp đồng bộ vào WordTrie để gõ phím & Glide (< 5ms)
+            // 2. Nếu là cụm từ (nhiều âm tiết): Nạp vào NextWordPredictor ở Background Thread để tránh chặn Main Thread & Jetsam crash
+            if !word.contains(" ") {
+                unigramLines.append((word, freq))
+            } else {
+                phraseLines.append((word, freq))
+            }
+        }
+
+        // 1. Nạp đồng bộ các từ đơn (7.741 từ) và cụm từ tần suất cao (>= 200) để bàn phím sẵn sàng ngay (< 5ms)
+        for item in unigramLines {
+            self.insert(word: item.0, frequency: item.1)
+        }
+        var backgroundPhrases: [(String, Int)] = []
+        backgroundPhrases.reserveCapacity(phraseLines.count)
+        for item in phraseLines {
+            if item.1 >= 200 {
+                NextWordPredictor.shared.registerPhrase(phrase: item.0, frequency: item.1)
+            } else {
+                backgroundPhrases.append(item)
+            }
+        }
+        self.totalWordsCount += phraseLines.count
+
+        // 2. Nạp bất đồng bộ hơn 81.000 cụm từ N-gram còn lại trong nền để giải phóng Main Thread và giảm RAM spike
+        let phrasesToLoad = backgroundPhrases
+        DispatchQueue.global(qos: .utility).async {
+            for item in phrasesToLoad {
+                NextWordPredictor.shared.registerPhrase(phrase: item.0, frequency: item.1)
             }
         }
     }

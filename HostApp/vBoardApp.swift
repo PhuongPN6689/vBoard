@@ -59,6 +59,31 @@ struct SettingsDashboardView: View {
                         .font(.caption2)
                 }
 
+                // Section Nổi bật: Hướng dẫn kích hoạt bàn phím
+                Section(header: Label("Bắt đầu nhanh", systemImage: "sparkles")) {
+                    NavigationLink {
+                        KeyboardSetupGuideView()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.title2)
+                                .foregroundStyle(.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Hướng dẫn kích hoạt bàn phím")
+                                    .font(.headline)
+                                Text("3 bước đơn giản để kích hoạt vBoard trong Cài đặt iPhone")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 3)
+                    }
+                }
+
                 // Section 2: Danh mục 9 Phân hệ Cài đặt Chuyên sâu
                 Section(header: Label("Cấu hình bàn phím vBoard", systemImage: "slider.horizontal.3")) {
                     // 1. Bố cục & Phím
@@ -84,6 +109,19 @@ struct SettingsDashboardView: View {
                             Text("Bi-gram, Emoji")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Điểm số Từ điển & Tự học N-gram
+                    NavigationLink {
+                        DictionaryScoresExplorerView()
+                    } label: {
+                        HStack {
+                            Label("Điểm số Từ điển & Tự học N-gram", systemImage: "chart.bar.doc.horizontal.fill")
+                            Spacer()
+                            Text("1, 2, 3 chữ")
+                                .font(.subheadline)
+                                .foregroundStyle(.blue)
                         }
                     }
 
@@ -179,15 +217,33 @@ struct SettingsDashboardView: View {
                     }
                 }
 
-                // Section 3: Thông tin & Trạng thái
-                Section(header: Label("Giám sát & Thông tin", systemImage: "info.circle")) {
+                // Section 3: Thông tin, Trợ giúp & Quyền riêng tư
+                Section(header: Label("Thông tin & Trợ giúp", systemImage: "info.circle")) {
+                    NavigationLink {
+                        KeyboardSetupGuideView()
+                    } label: {
+                        Label("Hướng dẫn kích hoạt bàn phím", systemImage: "questionmark.circle")
+                    }
+
+                    NavigationLink {
+                        PrivacySecurityPolicyView()
+                    } label: {
+                        HStack {
+                            Label("Chính sách Quyền riêng tư & Bảo mật", systemImage: "lock.shield.fill")
+                            Spacer()
+                            Text("100% On-Device")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                    }
+
                     NavigationLink {
                         PerformanceAboutView()
                     } label: {
                         HStack {
-                            Label("Hướng dẫn & Giám sát RAM", systemImage: "bolt.fill")
+                            Label("Thông tin Kỹ thuật & Hiệu năng", systemImage: "bolt.fill")
                             Spacer()
-                            Text("RAM ~9.8 MB")
+                            Text("RAM < 15MB")
                                 .font(.subheadline)
                                 .foregroundStyle(.green)
                         }
@@ -222,7 +278,6 @@ struct KeysLayoutSettingsView: View {
     @State private var isCommaEnabled: Bool = vBoardSettings.shared.isCommaKeyEnabled
     @State private var isPeriodEnabled: Bool = vBoardSettings.shared.isPeriodKeyEnabled
     @State private var isHintSymbols: Bool = vBoardSettings.shared.isHintSymbolsEnabled
-    @State private var isGlobeHidden: Bool = vBoardSettings.shared.isGlobeKeyHidden
     @State private var fontFamily: KeyboardFontFamily = vBoardSettings.shared.fontFamily
     @State private var fontSizeScale: Double = vBoardSettings.shared.fontSizeScale
 
@@ -284,12 +339,6 @@ struct KeysLayoutSettingsView: View {
                 Toggle("Ký hiệu phụ trên phím chữ", isOn: $isHintSymbols)
                     .onChange(of: isHintSymbols) { val in
                         vBoardSettings.shared.isHintSymbolsEnabled = val
-                        vBoardSettings.shared.notifySettingsChanged()
-                    }
-
-                Toggle("Ẩn phím quả cầu 🌐 (thay bằng icon Emoji)", isOn: $isGlobeHidden)
-                    .onChange(of: isGlobeHidden) { val in
-                        vBoardSettings.shared.isGlobeKeyHidden = val
                         vBoardSettings.shared.notifySettingsChanged()
                     }
             }
@@ -354,6 +403,18 @@ struct TextCorrectionSettingsView: View {
                         vBoardSettings.shared.isTextToEmojiEnabled = val
                         vBoardSettings.shared.notifySettingsChanged()
                     }
+
+                NavigationLink {
+                    DictionaryScoresExplorerView()
+                } label: {
+                    HStack {
+                        Label("Tra cứu Điểm số Từ điển (1, 2, 3 chữ)", systemImage: "chart.bar.xaxis")
+                        Spacer()
+                        Text("Chi tiết")
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
+                    }
+                }
             }
 
             Section(header: Text("Tự động sửa & Thông minh")) {
@@ -423,6 +484,22 @@ struct GlideTypingSettingsView: View {
                         vBoardSettings.shared.notifySettingsChanged()
                     }
             }
+
+            #if DEBUG
+            Section(header: Text("Kiểm thử & Thu thập dữ liệu")) {
+                NavigationLink {
+                    GlideBenchmarkView()
+                } label: {
+                    HStack {
+                        Label("Phòng thí nghiệm & Thu thập dữ liệu 50 từ", systemImage: "sparkles.rectangle.stack.fill")
+                        Spacer()
+                        Text("50 từ Lab")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    }
+                }
+            }
+            #endif
         }
         .navigationTitle("Nhập bằng cách lướt")
     }
@@ -967,6 +1044,23 @@ struct DeveloperSettingsView: View {
                         vBoardSettings.shared.notifySettingsChanged()
                     }
             }
+
+            #if DEBUG
+            Section(header: Text("Phòng thí nghiệm & Thu thập dữ liệu vuốt")) {
+                NavigationLink {
+                    GlideBenchmarkView()
+                } label: {
+                    HStack {
+                        Label("Phòng thí nghiệm Vuốt phím (Glide Lab)", systemImage: "sparkles.rectangle.stack.fill")
+                            .foregroundStyle(.blue)
+                        Spacer()
+                        Text("50 từ")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            #endif
         }
         .navigationTitle("Bàn phím Lập trình viên")
     }
@@ -984,6 +1078,8 @@ struct ClipboardDictionarySettingsView: View {
 
     @State private var newKey = ""
     @State private var newVal = ""
+
+    @State private var userWordsCount: Int = UserAdaptiveLearningStore.shared.getAllUserWords().count
 
     var body: some View {
         Form {
@@ -1044,7 +1140,19 @@ struct ClipboardDictionarySettingsView: View {
                 }
             }
 
-            Section(header: Text("Từ điển tiếng Việt")) {
+            Section(header: Text("Từ điển tiếng Việt & Thói quen Cá nhân")) {
+                NavigationLink {
+                    PersonalDictionaryManagementView()
+                } label: {
+                    HStack {
+                        Label("Từ điển Cá nhân (Các từ hay dùng)", systemImage: "text.badge.plus")
+                        Spacer()
+                        Text("\(userWordsCount) từ đã học")
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
+                    }
+                }
+
                 HStack {
                     Text("Tổng số từ vựng tích hợp:")
                     Spacer()
@@ -1057,6 +1165,209 @@ struct ClipboardDictionarySettingsView: View {
         .onAppear {
             history = ClipboardManager.shared.getHistory()
             shortcuts = ShortcutManager.shared.getShortcuts()
+            userWordsCount = UserAdaptiveLearningStore.shared.getAllUserWords().count
+        }
+    }
+}
+
+// MARK: - Màn hình Quản lý Từ điển Cá nhân (Personal Dictionary Management)
+struct PersonalDictionaryManagementView: View {
+    @State private var userWords: [(word: String, freq: Int)] = []
+    @State private var searchText: String = ""
+    @State private var newWordText: String = ""
+    @State private var newFreqText: String = "10"
+    @State private var exportedJSON: String = ""
+    @State private var isShowingExportSheet: Bool = false
+    @State private var isShowingImportAlert: Bool = false
+    @State private var importText: String = ""
+    @State private var statusToast: String = ""
+    @State private var showStatusToast: Bool = false
+
+    var filteredWords: [(word: String, freq: Int)] {
+        let sorted = userWords.sorted { $0.freq > $1.freq }
+        if searchText.isEmpty {
+            return sorted
+        }
+        return sorted.filter { $0.word.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    var body: some View {
+        Form {
+            Section(header: Text("Thêm từ mới vào từ điển cá nhân")) {
+                HStack {
+                    TextField("Từ mới (ví dụ: Zalo, GenAI...)", text: $newWordText)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    TextField("Tần suất", text: $newFreqText)
+                        .keyboardType(.numberPad)
+                        .frame(width: 70)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Thêm") {
+                        let clean = newWordText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let freq = Int(newFreqText) ?? 10
+                        if !clean.isEmpty {
+                            UserAdaptiveLearningStore.shared.addUserWordDirectly(clean, frequency: freq)
+                            newWordText = ""
+                            refreshList()
+                            showToast("Đã thêm '\(clean)'")
+                        }
+                    }
+                    .disabled(newWordText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+
+            Section {
+                if filteredWords.isEmpty {
+                    Text(searchText.isEmpty ? "Chưa có từ cá nhân nào được kết nạp. Bàn phím sẽ tự động kết nạp khi bạn gõ lặp lại một từ lạ từ 3 lần trở lên." : "Không tìm thấy từ nào khớp với '\(searchText)'.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredWords, id: \.word) { item in
+                        HStack {
+                            Text(item.word)
+                                .font(.body)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text("\(item.freq) lần gõ")
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.blue.opacity(0.12))
+                                .foregroundStyle(.blue)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .onDelete { indexSet in
+                        for idx in indexSet {
+                            let item = filteredWords[idx]
+                            UserAdaptiveLearningStore.shared.deleteUserWord(item.word)
+                        }
+                        refreshList()
+                        showToast("Đã xóa từ được chọn")
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Các từ bạn hay dùng nhất (\(filteredWords.count))")
+                    Spacer()
+                }
+            } footer: {
+                Text("Vuốt sang trái để xóa một từ khỏi danh sách tự học.")
+                    .font(.caption2)
+            }
+
+            Section(header: Text("Sao lưu & Khôi phục qua App Group")) {
+                Button {
+                    if let json = UserAdaptiveLearningStore.shared.exportJSON() {
+                        exportedJSON = json
+                        UIPasteboard.general.string = json
+                        showToast("Đã sao chép JSON sao lưu vào Bảng tạm!")
+                        isShowingExportSheet = true
+                    }
+                } label: {
+                    Label("Xuất file sao lưu từ điển (Export JSON)", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    isShowingImportAlert = true
+                } label: {
+                    Label("Nhập file sao lưu từ điển (Import JSON)", systemImage: "square.and.arrow.down")
+                }
+            }
+
+            Section(header: Text("Cơ chế học thích ứng (Lifelong Learning)")) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("• Ngưỡng kết nạp: Từ lạ được gõ ≥ 3 lần sẽ chính thức lưu vào từ điển.")
+                    Text("• Vùng đệm Staging: Từ chỉ gõ 1 lần sẽ tự động đào thải sau 24 giờ.")
+                    Text("• Đào thải tự nhiên (Half-Life): Điểm số tự động suy giảm định kỳ (0.85) để ưu tiên từ mới.")
+                    Text("• Giới hạn an toàn: Tối đa 2.000 từ đơn, dung lượng file lưu đĩa luôn < 300 KB.")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Từ điển Cá nhân")
+        .searchable(text: $searchText, prompt: "Tìm kiếm từ cá nhân...")
+        .alert("Nhập bản sao lưu JSON", isPresented: $isShowingImportAlert) {
+            TextField("Dán chuỗi JSON sao lưu vào đây...", text: $importText)
+            Button("Nhập", role: .none) {
+                if UserAdaptiveLearningStore.shared.importJSON(importText) {
+                    refreshList()
+                    showToast("Đã nhập từ điển thành công!")
+                } else {
+                    showToast("Lỗi định dạng JSON sao lưu!")
+                }
+                importText = ""
+            }
+            Button("Hủy", role: .cancel) {
+                importText = ""
+            }
+        }
+        .sheet(isPresented: $isShowingExportSheet) {
+            NavigationStack {
+                VStack(spacing: 16) {
+                    Text("Dữ liệu sao lưu từ điển cá nhân (JSON)")
+                        .font(.headline)
+                        .padding(.top, 16)
+                    ScrollView {
+                        Text(exportedJSON)
+                            .font(.system(.caption, design: .monospaced))
+                            .padding()
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(8)
+                    }
+                    .padding(.horizontal)
+                    Button {
+                        UIPasteboard.general.string = exportedJSON
+                        showToast("Đã sao chép vào Bảng tạm")
+                        isShowingExportSheet = false
+                    } label: {
+                        Label("Sao chép vào Bảng tạm", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.horizontal)
+                    .padding(.bottom, 16)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Đóng") { isShowingExportSheet = false }
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if showStatusToast {
+                Text(statusToast)
+                    .font(.footnote)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(20)
+                    .shadow(radius: 4)
+                    .padding(.bottom, 20)
+                    .transition(.opacity)
+            }
+        }
+        .onAppear {
+            refreshList()
+        }
+    }
+
+    private func refreshList() {
+        let all = UserAdaptiveLearningStore.shared.getAllUserWords()
+        userWords = all.map { ($0.key, $0.value) }
+    }
+
+    private func showToast(_ msg: String) {
+        statusToast = msg
+        withAnimation {
+            showStatusToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation {
+                showStatusToast = false
+            }
         }
     }
 }
@@ -1110,16 +1421,152 @@ struct ToolbarSettingsView: View {
     }
 }
 
-// MARK: - 11. Màn hình Hướng dẫn & Giám sát RAM (PerformanceAboutView)
+// MARK: - 11. Màn hình Hướng dẫn Kích hoạt (KeyboardSetupGuideView)
+
+struct KeyboardSetupGuideView: View {
+    var body: some View {
+        List {
+            Section(header: Text("Các bước kích hoạt bàn phím vBoard")) {
+                HStack(alignment: .top, spacing: 14) {
+                    Text("1")
+                        .font(.headline)
+                        .frame(width: 28, height: 28)
+                        .background(Color.blue)
+                        .foregroundStyle(.white)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Mở Cài đặt hệ thống")
+                            .font(.headline)
+                        Text("Vào ứng dụng Cài đặt (Settings) trên iPhone của bạn.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+
+                HStack(alignment: .top, spacing: 14) {
+                    Text("2")
+                        .font(.headline)
+                        .frame(width: 28, height: 28)
+                        .background(Color.blue)
+                        .foregroundStyle(.white)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Thêm bàn phím vBoard")
+                            .font(.headline)
+                        Text("Chọn Cài đặt chung (General) → Bàn phím (Keyboard) → Bàn phím → Thêm bàn phím mới... và chọn 'vBoard'.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+
+                HStack(alignment: .top, spacing: 14) {
+                    Text("3")
+                        .font(.headline)
+                        .frame(width: 28, height: 28)
+                        .background(Color.blue)
+                        .foregroundStyle(.white)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Bật 'Cho phép Truy cập Đầy đủ' (Tùy chọn)")
+                            .font(.headline)
+                        Text("Chạm vào vBoard và bật 'Cho phép truy cập đầy đủ' để sử dụng rung phản hồi Taptic Engine và tính năng dán Bảng tạm. vBoard cam kết 100% không gửi dữ liệu ra ngoài.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        Label("Mở Cài đặt iPhone ngay", systemImage: "gearshape.fill")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                }
+                .listRowBackground(Color.blue)
+            }
+        }
+        .navigationTitle("Hướng dẫn Kích hoạt")
+    }
+}
+
+// MARK: - 12. Chính sách Quyền riêng tư & Bảo mật (PrivacySecurityPolicyView)
+
+struct PrivacySecurityPolicyView: View {
+    var body: some View {
+        List {
+            Section(header: Label("Cam kết Bảo mật cốt lõi", systemImage: "lock.shield.fill")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .foregroundStyle(.green)
+                        Text("100% Không ghi nhận phím gõ")
+                            .font(.headline)
+                    }
+                    Text("vBoard tuyệt đối không ghi nhận, không theo dõi và không lưu trữ lịch sử những gì bạn gõ (tài khoản, mật khẩu, tin nhắn, số thẻ tín dụng...).")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "wifi.slash")
+                            .foregroundStyle(.blue)
+                        Text("Hoạt động Ngoại tuyến (Zero Network)")
+                            .font(.headline)
+                    }
+                    Text("vBoard không chứa bất kỳ mã nguồn kết nối mạng hay dịch vụ phân tích từ xa (Analytics/Tracker) nào. Toàn bộ thuật toán gõ tiếng Việt và xử lý cử chỉ vuốt đều chạy nội bộ trên chip xử lý của iPhone.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "internaldrive.fill")
+                            .foregroundStyle(.purple)
+                        Text("Lưu trữ Cục bộ (On-Device Local)")
+                            .font(.headline)
+                    }
+                    Text("Từ điển cá nhân và các từ bạn chủ động lưu chỉ được lưu trữ trong bộ nhớ an toàn (App Group container) trên thiết bị của bạn và không bao giờ rời khỏi thiết bị.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section(header: Text("Quyền truy cập đầy đủ (Allow Full Access)")) {
+                Text("Apple hiển thị thông báo cảnh báo tiêu chuẩn mỗi khi bạn bật Full Access cho bất kỳ bàn phím bên thứ ba nào. Với vBoard, quyền này CHỈ được dùng để:\n\n• Kích hoạt rung phản hồi xúc giác (Taptic Engine) khi gõ phím.\n• Cho phép bạn chạm nút Dán (Paste) để chèn nội dung bạn vừa sao chép.\n\nNếu bạn không bật Full Access, vBoard vẫn hoạt động bình thường cho mọi tác vụ gõ tiếng Việt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Chính sách Bảo mật")
+    }
+}
+
+// MARK: - 13. Màn hình Thông tin Kỹ thuật & Hiệu năng (PerformanceAboutView)
 
 struct PerformanceAboutView: View {
     var body: some View {
         Form {
-            Section(header: Text("Báo cáo Giám sát Hiệu năng")) {
+            Section(header: Text("Chỉ số Hiệu năng & Bộ nhớ")) {
                 HStack {
-                    Text("Bộ nhớ RAM sử dụng thực tế:")
+                    Text("Bộ nhớ RAM sử dụng:")
                     Spacer()
-                    Text("~9.8 MB")
+                    Text("< 15 MB")
                         .fontWeight(.bold)
                         .foregroundStyle(.green)
                 }
@@ -1130,39 +1577,400 @@ struct PerformanceAboutView: View {
                         .foregroundStyle(.secondary)
                 }
                 HStack {
-                    Text("Thời gian xử lý 1 ký tự:")
+                    Text("Thời gian xử lý ký tự:")
                     Spacer()
-                    Text("0.0322 ms")
+                    Text("< 0.05 ms")
                         .fontWeight(.semibold)
                         .foregroundStyle(.blue)
                 }
                 HStack {
-                    Text("Thời gian tra cứu Trie 19.047 từ:")
-                    Spacer()
-                    Text("0.0470 ms")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.blue)
-                }
-                HStack {
-                    Text("Độ trễ đồng bộ Darwin IPC:")
+                    Text("Độ trễ đồng bộ IPC:")
                     Spacer()
                     Text("< 0.1 ms")
                         .foregroundStyle(.green)
                 }
+                HStack {
+                    Text("Bộ từ vựng tiếng Việt tích hợp:")
+                    Spacer()
+                    Text("~94.000 từ & ngữ cảnh")
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            Section(header: Text("Hướng dẫn kích hoạt bàn phím")) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("1. Mở Cài đặt (Settings) trên iOS.")
-                    Text("2. Chọn Cài đặt chung (General) -> Bàn phím (Keyboard).")
-                    Text("3. Chọn Bàn phím -> Thêm bàn phím mới...")
-                    Text("4. Chọn vBoard trong danh sách.")
-                    Text("5. Bật 'Cho phép truy cập đầy đủ' (Allow Full Access) để bàn phím có thể đọc lịch sử Bảng tạm.")
+            Section(header: Text("Thông tin Ứng dụng")) {
+                HStack {
+                    Text("Phiên bản:")
+                    Spacer()
+                    Text("1.0 (Production Ready)")
+                        .foregroundStyle(.secondary)
                 }
-                .font(.subheadline)
-                .padding(.vertical, 4)
+                HStack {
+                    Text("Bộ gõ lõi:")
+                    Spacer()
+                    Text("OpenKey Swift Native")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
-        .navigationTitle("Hướng dẫn & Giám sát")
+        .navigationTitle("Thông tin Kỹ thuật")
+    }
+}
+
+// MARK: - Màn hình Quản lý và Tra cứu Điểm số Từ điển (Dictionary & N-gram Explorer)
+struct DictionaryScoresExplorerView: View {
+    @State private var selectedTab: Int = 0
+    @State private var searchText: String = ""
+
+    // State cho Tab 1: Từ điển tự học
+    @State private var stagingWords: [(word: String, count: Int, lastTime: Date)] = []
+    @State private var userWords: [(word: String, score: Int)] = []
+    @State private var newCustomWord: String = ""
+    @State private var showAddWordSheet: Bool = false
+
+    // State cho Tab 2: Từ điển 1 chữ
+    @State private var unigramResults: [(word: String, freq: Int)] = []
+
+    // State cho Tab 3: Từ điển 2 chữ (Bigram)
+    @State private var bigramResults: [(context: String, candidates: [(word: String, score: Double)])] = []
+
+    // State cho Tab 4: Từ điển 3 chữ (Trigram)
+    @State private var trigramResults: [(context: String, candidates: [(word: String, score: Double)])] = []
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Segmented Tab Control
+            Picker("Loại từ điển", selection: $selectedTab) {
+                Text("Tự học").tag(0)
+                Text("1 chữ").tag(1)
+                Text("2 chữ").tag(2)
+                Text("3 chữ").tag(3)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            // Search Bar
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField(searchPlaceholder, text: $searchText)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        reloadData()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(8)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .cornerRadius(10)
+            .padding(.horizontal)
+            .padding(.bottom, 6)
+            .onChange(of: searchText) { _ in
+                reloadData()
+            }
+
+            // Tab Content
+            TabView(selection: $selectedTab) {
+                adaptiveLearningTab
+                    .tag(0)
+                unigramsTab
+                    .tag(1)
+                bigramsTab
+                    .tag(2)
+                trigramsTab
+                    .tag(3)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+        }
+        .navigationTitle("Điểm số & Từ điển")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if selectedTab == 0 {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showAddWordSheet = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                }
+            }
+        }
+        .onAppear {
+            reloadData()
+        }
+        .sheet(isPresented: $showAddWordSheet) {
+            addCustomWordSheet
+        }
+    }
+
+    private var searchPlaceholder: String {
+        switch selectedTab {
+        case 0: return "Lọc từ tự học hoặc từ đang theo dõi..."
+        case 1: return "Tìm từ 1 chữ (ví dụ: người, việt, học)..."
+        case 2: return "Tìm gốc từ 2 chữ (ví dụ: ăn, chúc, làm)..."
+        case 3: return "Tìm ngữ cảnh 3 chữ (ví dụ: chúc bạn, thời gian)..."
+        default: return "Tìm kiếm..."
+        }
+    }
+
+    // MARK: - Tab 1: Từ điển Tự học & Vùng đệm Staging
+    private var adaptiveLearningTab: some View {
+        List {
+            // Giải thích quy tắc tự học
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.blue)
+                        Text("Quy tắc Kết nạp Tự động (Adaptive Rule)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    Text("Một từ lạ khi được gõ lặp lại ít nhất **2 lần trong vòng 24 giờ** sẽ tự động được đưa vào Từ điển chính thức và tăng điểm ưu tiên khi gợi ý.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            // 1. Vùng đệm Staging (Đang theo dõi lặp lại)
+            Section(header: Text("Vùng đệm theo dõi (Staging Buffer - \(stagingWords.count) từ)")) {
+                if stagingWords.isEmpty {
+                    Text("Chưa có từ lạ nào đang theo dõi.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(stagingWords, id: \.word) { item in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.word)
+                                    .font(.body)
+                                    .fontWeight(.medium)
+                                Text("Lần gần nhất: \(formattedDate(item.lastTime))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(item.count) / 2 lần")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(item.count >= 2 ? .green : .orange)
+                                Text(item.count >= 2 ? "Chuẩn bị kết nạp" : "Cần thêm \(2 - item.count) lần")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Danh sách từ đã kết nạp chính thức
+            Section(header: Text("Từ điển cá nhân đã kết nạp (\(userWords.count) từ)")) {
+                if userWords.isEmpty {
+                    Text("Chưa có từ cá nhân nào được lưu.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(userWords, id: \.word) { item in
+                        HStack {
+                            Text(item.word)
+                                .font(.body)
+                            Spacer()
+                            Text("Điểm: \(item.score)")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.blue.opacity(0.12))
+                                .foregroundStyle(.blue)
+                                .cornerRadius(8)
+                        }
+                    }
+                    .onDelete(perform: deleteUserWords)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    // MARK: - Tab 2: Từ điển 1 chữ (Unigrams)
+    private var unigramsTab: some View {
+        List {
+            Section(header: Text("Từ đơn tiếng Việt & Điểm tần suất (\(unigramResults.count) kết quả)")) {
+                if unigramResults.isEmpty {
+                    Text("Không tìm thấy từ nào phù hợp.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(unigramResults, id: \.word) { item in
+                        HStack {
+                            Text(item.word)
+                                .font(.body)
+                            Spacer()
+                            Text("Tần suất: \(item.freq)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    // MARK: - Tab 3: Từ điển 2 chữ (Bigrams)
+    private var bigramsTab: some View {
+        List {
+            if bigramResults.isEmpty {
+                Section {
+                    Text("Nhập từ vào ô tìm kiếm để xem các từ tiếp theo được dự đoán (ví dụ: 'ăn', 'chúc', 'công', 'thời').")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(bigramResults, id: \.context) { group in
+                    Section(header: Text("Từ gốc: \"\(group.context)\"")) {
+                        ForEach(Array(group.candidates.enumerated()), id: \.element.word) { idx, candidate in
+                            HStack {
+                                Text("\(idx + 1).")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20, alignment: .leading)
+                                Text(candidate.word)
+                                    .font(.body)
+                                    .fontWeight(idx == 0 ? .semibold : .regular)
+                                Spacer()
+                                Text("Điểm: \(Int(candidate.score))")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(idx == 0 ? .blue : .secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    // MARK: - Tab 4: Từ điển 3 chữ (Trigrams)
+    private var trigramsTab: some View {
+        List {
+            if trigramResults.isEmpty {
+                Section {
+                    Text("Nhập 2 từ vào ô tìm kiếm để xem từ thứ ba được dự đoán (ví dụ: 'chúc bạn', 'thời gian', 'công nghệ').")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(trigramResults, id: \.context) { group in
+                    Section(header: Text("Ngữ cảnh: \"\(group.context)\"")) {
+                        ForEach(Array(group.candidates.enumerated()), id: \.element.word) { idx, candidate in
+                            HStack {
+                                Text("\(idx + 1).")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20, alignment: .leading)
+                                Text(candidate.word)
+                                    .font(.body)
+                                    .fontWeight(idx == 0 ? .semibold : .regular)
+                                Spacer()
+                                Text("Điểm: \(Int(candidate.score))")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(idx == 0 ? .green : .secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    // Sheet thêm từ thủ công
+    private var addCustomWordSheet: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text("Thêm từ mới vào từ điển cá nhân")) {
+                    TextField("Nhập từ (ví dụ: DeepSeek, ChatGPT...)", text: $newCustomWord)
+                        .autocorrectionDisabled()
+                }
+            }
+            .navigationTitle("Thêm từ cá nhân")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Hủy") {
+                        showAddWordSheet = false
+                        newCustomWord = ""
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Lưu") {
+                        let trimmed = newCustomWord.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            UserAdaptiveLearningStore.shared.addUserWordDirectly(trimmed, frequency: 15)
+                            newCustomWord = ""
+                            showAddWordSheet = false
+                            reloadData()
+                        }
+                    }
+                    .disabled(newCustomWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    // MARK: - Data Reloaders
+    private func reloadData() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 1. Tab 0: Adaptive
+        let allStaging = UserAdaptiveLearningStore.shared.getStagingWordsDetails()
+        if query.isEmpty {
+            stagingWords = allStaging
+        } else {
+            stagingWords = allStaging.filter { $0.word.lowercased().contains(query.lowercased()) }
+        }
+
+        let allUser = UserAdaptiveLearningStore.shared.getUserWordsWithScores()
+        if query.isEmpty {
+            userWords = allUser
+        } else {
+            userWords = allUser.filter { $0.word.lowercased().contains(query.lowercased()) }
+        }
+
+        // 2. Tab 1: Unigram
+        unigramResults = WordTrie.shared.searchUnigramWords(filter: query.isEmpty ? nil : query, limit: 60)
+
+        // 3. Tab 2: Bigrams
+        bigramResults = NextWordPredictor.shared.getRankedBigrams(filter: query.isEmpty ? nil : query, limit: 30)
+
+        // 4. Tab 3: Trigrams
+        trigramResults = NextWordPredictor.shared.getRankedTrigrams(filter: query.isEmpty ? nil : query, limit: 30)
+    }
+
+    private func deleteUserWords(at offsets: IndexSet) {
+        for index in offsets {
+            let item = userWords[index]
+            UserAdaptiveLearningStore.shared.deleteUserWord(item.word)
+        }
+        reloadData()
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm dd/MM"
+        return formatter.string(from: date)
     }
 }

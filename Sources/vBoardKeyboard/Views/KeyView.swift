@@ -549,5 +549,19 @@ public final class KeyView: UIControl {
             alpha = isHighlighted ? 0.7 : 1.0
         }
     }
+
+    public func setTemporaryHighlight(_ highlighted: Bool) {
+        if highlighted {
+            transform = CGAffineTransform(scaleX: 1.08, y: 1.08)
+            alpha = 0.75
+            layer.borderColor = UIColor.systemTeal.cgColor
+            layer.borderWidth = 1.5
+        } else {
+            transform = .identity
+            alpha = 1.0
+            layer.borderWidth = 0.0
+            updateTheme()
+        }
+    }
 }
 #endif

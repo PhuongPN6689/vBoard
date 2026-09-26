@@ -49,7 +49,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.nguyenphuong.vBoard
         INFOPLIST_KEY_CFBundleDisplayName: "vBoard"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         CODE_SIGN_ENTITLEMENTS: HostApp/vBoard.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     scheme:
@@ -81,6 +84,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nguyenphuong.vBoard.KeyboardExtension
         INFOPLIST_KEY_CFBundleDisplayName: "vBoard"
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         CODE_SIGN_ENTITLEMENTS: KeyboardExtension/vBoardKeyboardExtension.entitlements
         SKIP_INSTALL: NO
         GENERATE_INFOPLIST_FILE: NO

@@ -1,0 +1,898 @@
+import SwiftUI
+import vBoardEngine
+import vBoardKeyboard
+
+// MARK: - Embedded Keyboard Representable for Live Swiping & Playback
+
+struct EmbeddedKeyboardViewRepresentable: UIViewRepresentable {
+    let keyboardView: KeyboardView
+
+    func makeUIView(context: Context) -> UIView {
+        // Kích hoạt tính năng vuốt để nhập trong phiên thử nghiệm
+        vBoardSettings.shared.isGlideTypingEnabled = true
+        vBoardSettings.shared.isGlideTrailEnabled = true
+
+        let container = UIView()
+        container.backgroundColor = .clear
+
+        keyboardView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(keyboardView)
+
+        NSLayoutConstraint.activate([
+            keyboardView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            keyboardView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            keyboardView.topAnchor.constraint(equalTo: container.topAnchor),
+            keyboardView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        return container
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        keyboardView.setNeedsLayout()
+    }
+}
+
+// MARK: - Main Glide Lab & Benchmark View
+
+public struct GlideBenchmarkView: View {
+    @State private var words: [GlideChallengeWord] = GlideBenchmarkStore.default50Words
+    @State private var currentIndex: Int = 0
+    @State private var selectedCategory: String = "Tất cả"
+    @State private var matchUnaccentedOnly: Bool = true
+    @State private var autoAdvance: Bool = false
+
+    // Quản lý phiên dữ liệu
+    @State private var store = GlideBenchmarkStore.shared
+    @State private var sessions: [String: GlideRecordedSession] = [:]
+
+    // Keyboard View dùng chung cho cả tương tác trực tiếp & phát lại
+    @State private var keyboardView = KeyboardView(frame: CGRect(x: 0, y: 0, width: 390, height: 260))
+
+    // Trạng thái Playback
+    @State private var isPlaying: Bool = false
+    @State private var playbackProgress: Double = 0.0
+    @State private var playbackSpeed: Double = 1.0
+    @State private var isScrubbing: Bool = false
+
+    // Sheets & Alerts
+    @State private var showExportSheet: Bool = false
+    @State private var showWordListSheet: Bool = false
+    @State private var showReevalSheet: Bool = false
+    @State private var reevalResults: [GlideReevaluationResult] = []
+    @State private var alertMessage: String = ""
+    @State private var showAlert: Bool = false
+
+    private let categories = [
+        "Tất cả",
+        "Từ 2 ký tự",
+        "Từ 3 ký tự",
+        "Từ 4 ký tự",
+        "Từ 5 ký tự",
+        "Từ 6 ký tự",
+        "Từ 7 ký tự"
+    ]
+
+    var filteredWords: [GlideChallengeWord] {
+        if selectedCategory == "Tất cả" {
+            return words
+        }
+        return words.filter { $0.category == selectedCategory }
+    }
+
+    var currentWord: GlideChallengeWord {
+        let list = filteredWords
+        guard !list.isEmpty else { return words[0] }
+        let safe = min(max(0, currentIndex), list.count - 1)
+        return list[safe]
+    }
+
+    var currentSession: GlideRecordedSession? {
+        sessions[currentWord.targetWord.lowercased()]
+    }
+
+    var recordedCount: Int {
+        words.filter { sessions[$0.targetWord.lowercased()] != nil }.count
+    }
+
+    var passCount: Int {
+        words.filter { word in
+            if let sess = sessions[word.targetWord.lowercased()] {
+                return sess.isMatch
+            }
+            return false
+        }.count
+    }
+
+    var accuracyPercentage: Double {
+        guard recordedCount > 0 else { return 0.0 }
+        return (Double(passCount) / Double(recordedCount)) * 100.0
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            // Phần cuộn phía trên: Chứa thông số, từ mục tiêu, điều hướng, kết quả kiểm tra
+            ScrollView {
+                VStack(spacing: 12) {
+                    // Header: Thống kê & Tiến độ
+                    headerStatsSection
+
+                    // Bộ lọc danh mục
+                    categoryFilterSection
+
+                    // Thẻ từ mục tiêu cần vuốt
+                    targetWordCard
+
+                    // Điều hướng từ trước / từ sau (đặt ngay dưới thẻ từ để dễ bấm)
+                    navigationButtons
+
+                    // Kết quả nhận diện & Thông số động học
+                    resultAndTelemetryCard
+
+                    // Bộ điều khiển phát lại vệt vuốt (Playback Controller)
+                    if let sess = currentSession, !sess.samples.isEmpty {
+                        playbackControlsCard(session: sess)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
+            }
+
+            Divider()
+
+            // Phần dưới: CỐ ĐỊNH Ở ĐÁY MÀN HÌNH, TOÀN BỘ CHIỀU NGANG
+            VStack(spacing: 0) {
+                // Thanh điều khiển bàn phím nhanh
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "hand.draw.fill")
+                            .foregroundStyle(.blue)
+                        Text("Bàn phím vuốt (Cố định ở đáy)")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    // Nút bật/tắt tự chuyển từ
+                    Button(action: { autoAdvance.toggle() }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: autoAdvance ? "checkmark.circle.fill" : "circle")
+                            Text("Tự chuyển từ")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(autoAdvance ? .blue : .secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    if currentSession != nil {
+                        Button("Xóa vệt") {
+                            keyboardView.resetPlaybackView()
+                        }
+                        .font(.caption2)
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Color(.secondarySystemBackground))
+
+                // Bàn phím nhúng full width tràn 2 bên
+                EmbeddedKeyboardViewRepresentable(keyboardView: keyboardView)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 260)
+            }
+            .background(Color(.systemBackground))
+        }
+        .navigationTitle("Phòng thí nghiệm vuốt (50 từ)")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button(action: { showWordListSheet = true }) {
+                        Label("Danh sách 50 từ", systemImage: "list.bullet")
+                    }
+                    Button(action: runReevaluation) {
+                        Label("Chạy lại kiểm thử dữ liệu đã lưu", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    Button(action: { showExportSheet = true }) {
+                        Label("Xuất / Gửi dữ liệu cho AI", systemImage: "square.and.arrow.up")
+                    }
+                    Divider()
+                    Button(role: .destructive, action: confirmClearCurrentWord) {
+                        Label("Xóa kết quả từ hiện tại", systemImage: "trash")
+                    }
+                    Button(role: .destructive, action: confirmClearAll) {
+                        Label("Xóa toàn bộ dữ liệu", systemImage: "trash.fill")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .onAppear {
+            setupKeyboardCallback()
+            loadSavedSessions()
+        }
+        .sheet(isPresented: $showExportSheet) {
+            GlideDataExportSheetView(
+                words: words,
+                sessions: sessions,
+                accuracyPercentage: accuracyPercentage,
+                matchUnaccented: matchUnaccentedOnly
+            )
+        }
+        .sheet(isPresented: $showWordListSheet) {
+            GlideWordListSheetView(
+                words: words,
+                sessions: sessions,
+                currentIndex: $currentIndex,
+                selectedCategory: $selectedCategory
+            )
+        }
+        .sheet(isPresented: $showReevalSheet) {
+            GlideReevaluationSheetView(results: reevalResults)
+        }
+        .alert(isPresented: $showAlert) {
+            Alert(title: Text("Thông báo"), message: Text(alertMessage), dismissButton: .default(Text("Đóng")))
+        }
+    }
+
+    // MARK: - UI Components
+
+    private var headerStatsSection: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Dữ liệu đã thu thập")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("\(recordedCount) / \(words.count) từ")
+                    .font(.headline)
+                    .bold()
+                ProgressView(value: Double(recordedCount), total: Double(words.count))
+                    .tint(.blue)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(10)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("Độ chính xác")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(String(format: "%.1f%%", accuracyPercentage))
+                    .font(.headline)
+                    .bold()
+                    .foregroundStyle(accuracyPercentage >= 80 ? .green : (accuracyPercentage >= 50 ? .orange : .red))
+                Text("PASS: \(passCount) | FAIL: \(recordedCount - passCount)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(10)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(10)
+        }
+    }
+
+    private var categoryFilterSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(categories, id: \.self) { cat in
+                    Button(action: {
+                        selectedCategory = cat
+                        currentIndex = 0
+                        keyboardView.resetPlaybackView()
+                    }) {
+                        Text(cat)
+                            .font(.caption)
+                            .bold(selectedCategory == cat)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedCategory == cat ? Color.accentColor : Color(.secondarySystemBackground))
+                            .foregroundStyle(selectedCategory == cat ? .white : .primary)
+                            .cornerRadius(14)
+                    }
+                }
+            }
+        }
+    }
+
+    private var targetWordCard: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text(currentWord.category)
+                    .font(.caption2)
+                    .bold()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.blue.opacity(0.12))
+                    .foregroundStyle(.blue)
+                    .cornerRadius(6)
+
+                Spacer()
+
+                // Badge trạng thái đã thu thập
+                if let sess = currentSession {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(sess.isMatch ? Color.green : Color.red)
+                            .frame(width: 8, height: 8)
+                        Text(sess.isMatch ? "ĐẠT (PASS)" : "LỖI (FAIL)")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundStyle(sess.isMatch ? .green : .red)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background((sess.isMatch ? Color.green : Color.red).opacity(0.12))
+                    .cornerRadius(6)
+                } else {
+                    Text("Chưa thu thập")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.gray.opacity(0.12))
+                        .cornerRadius(6)
+                }
+
+                Text("#\(currentIndex + 1)/\(filteredWords.count)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(currentWord.targetWord)
+                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Lộ trình gợi ý: \(currentWord.hintPath)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !currentWord.note.isEmpty {
+                Text(currentWord.note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground))
+        .cornerRadius(14)
+        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
+    }
+
+    private var resultAndTelemetryCard: some View {
+        Group {
+            if let sess = currentSession {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: sess.isMatch ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(sess.isMatch ? .green : .red)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(sess.isMatch ? "Nhận diện chính xác!" : "Nhận diện sai!")
+                                .font(.subheadline)
+                                .bold()
+                                .foregroundStyle(sess.isMatch ? .green : .red)
+                            Text("Kết quả ra: '\(sess.recognizedWord.isEmpty ? "(Không khớp từ nào)" : sess.recognizedWord)'")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        // Đề xuất top 3
+                        if !sess.topCandidates.isEmpty {
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text("Top đề xuất:")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(sess.topCandidates.joined(separator: ", "))
+                                    .font(.caption2)
+                                    .bold()
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // Thông số động học
+                    HStack(spacing: 12) {
+                        Label(String(format: "%.0f ms", sess.durationMs), systemImage: "clock")
+                        Label(String(format: "%.0f px/s", sess.avgVelocityPxPerSec), systemImage: "speedometer")
+                        Label("\(sess.samples.count) điểm", systemImage: "point.filled.topleft.point.curvedto.point.bottomright.up")
+                        Label(String(format: "%.0f px", sess.totalDistancePx), systemImage: "ruler")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                    if !sess.primarySeq.isEmpty {
+                        Text("Phím trích xuất: \(sess.primarySeq.map { String($0) }.joined(separator: " -> "))")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                    }
+                }
+                .padding(12)
+                .background((sess.isMatch ? Color.green : Color.red).opacity(0.08))
+                .cornerRadius(12)
+            }
+        }
+    }
+
+    private func playbackControlsCard(session: GlideRecordedSession) -> some View {
+        VStack(spacing: 8) {
+            HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "film.fill")
+                        .foregroundStyle(.blue)
+                    Text("Phát lại vệt vuốt")
+                        .font(.caption)
+                        .bold()
+                }
+
+                Spacer()
+
+                // Chọn tốc độ phát
+                Picker("Tốc độ", selection: $playbackSpeed) {
+                    Text("0.5x").tag(0.5)
+                    Text("1.0x").tag(1.0)
+                    Text("2.0x").tag(2.0)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+            }
+
+            // Thanh trượt thời gian (Scrubber)
+            HStack(spacing: 8) {
+                Button(action: togglePlayPause) {
+                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                }
+
+                Slider(value: Binding(
+                    get: { playbackProgress },
+                    set: { newVal in
+                        playbackProgress = newVal
+                        isScrubbing = true
+                        keyboardView.scrubPlayback(samples: session.samples, progress: newVal)
+                    }
+                ), in: 0.0...1.0)
+                .tint(.blue)
+
+                Text(String(format: "%.0f%%", playbackProgress * 100))
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .frame(width: 35)
+            }
+        }
+        .padding(10)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+
+    private var navigationButtons: some View {
+        HStack(spacing: 12) {
+            Button(action: prevWord) {
+                Label("Từ trước", systemImage: "chevron.left")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(currentIndex == 0)
+
+            Button(action: nextWord) {
+                Label("Từ kế tiếp", systemImage: "chevron.right")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(currentIndex >= filteredWords.count - 1)
+        }
+    }
+
+    // MARK: - Logic & Actions
+
+    private func setupKeyboardCallback() {
+        keyboardView.onGlideSessionFinished = { samples, primarySeq, fullSeq, matches, stats in
+            handleCompletedSwipe(
+                samples: samples,
+                primarySeq: primarySeq,
+                fullSeq: fullSeq,
+                matches: matches,
+                stats: stats
+            )
+        }
+    }
+
+    private func handleCompletedSwipe(
+        samples: [GlideSample],
+        primarySeq: [Character],
+        fullSeq: [Character],
+        matches: [String],
+        stats: GlideSessionStats?
+    ) {
+        let cleanTarget = currentWord.targetWord.lowercased()
+        let topWord = matches.first?.lowercased() ?? ""
+
+        let isMatch: Bool
+        if matchUnaccentedOnly {
+            let recAscii = WordTrie.stripDiacritics(topWord)
+            let targetAscii = WordTrie.stripDiacritics(cleanTarget)
+            isMatch = (!topWord.isEmpty && recAscii == targetAscii)
+        } else {
+            isMatch = (topWord == cleanTarget)
+        }
+
+        let session = GlideRecordedSession(
+            targetWord: currentWord.targetWord,
+            category: currentWord.category,
+            samples: samples,
+            primarySeqChars: primarySeq,
+            fullSeqChars: fullSeq,
+            recognizedWord: topWord,
+            topCandidates: matches,
+            durationMs: stats?.durationMs ?? 0,
+            totalDistancePx: stats?.totalDistancePx ?? 0,
+            avgVelocityPxPerSec: stats?.avgVelocityPxPerSec ?? 0,
+            peakVelocityPxPerSec: stats?.peakVelocityPxPerSec ?? 0,
+            isMatch: isMatch,
+            keyboardWidth: Double(keyboardView.bounds.width),
+            keyboardHeight: Double(keyboardView.bounds.height)
+        )
+
+        store.saveSession(session)
+        sessions[currentWord.targetWord.lowercased()] = session
+
+        // Haptic phản hồi & Tự chuyển từ (chỉ khi người dùng bật "Tự chuyển từ")
+        if isMatch && autoAdvance {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                if self.currentIndex < self.filteredWords.count - 1 {
+                    self.nextWord()
+                }
+            }
+        }
+    }
+
+    private func togglePlayPause() {
+        guard let sess = currentSession, !sess.samples.isEmpty else { return }
+
+        if isPlaying {
+            keyboardView.stopPlayback()
+            isPlaying = false
+        } else {
+            isPlaying = true
+            keyboardView.startPlayback(
+                samples: sess.samples,
+                speedMultiplier: playbackSpeed,
+                onProgress: { p in
+                    self.playbackProgress = p
+                },
+                onComplete: {
+                    self.isPlaying = false
+                    self.playbackProgress = 1.0
+                }
+            )
+        }
+    }
+
+    private func nextWord() {
+        if currentIndex < filteredWords.count - 1 {
+            currentIndex += 1
+            resetPlaybackState()
+        }
+    }
+
+    private func prevWord() {
+        if currentIndex > 0 {
+            currentIndex -= 1
+            resetPlaybackState()
+        }
+    }
+
+    private func resetPlaybackState() {
+        keyboardView.resetPlaybackView()
+        isPlaying = false
+        playbackProgress = 0.0
+    }
+
+    private func loadSavedSessions() {
+        sessions = store.getAllSessions()
+    }
+
+    private func runReevaluation() {
+        let results = store.reevaluateAll(matchUnaccented: matchUnaccentedOnly)
+        reevalResults = results
+        showReevalSheet = true
+        // Tải lại các phiên sau khi tái đánh giá
+        loadSavedSessions()
+    }
+
+    private func confirmClearCurrentWord() {
+        store.deleteSession(for: currentWord.targetWord)
+        sessions.removeValue(forKey: currentWord.targetWord.lowercased())
+        keyboardView.resetPlaybackView()
+    }
+
+    private func confirmClearAll() {
+        store.clearAll()
+        sessions.removeAll()
+        keyboardView.resetPlaybackView()
+    }
+}
+
+// MARK: - Word List Sheet View
+
+struct GlideWordListSheetView: View {
+    let words: [GlideChallengeWord]
+    let sessions: [String: GlideRecordedSession]
+    @Binding var currentIndex: Int
+    @Binding var selectedCategory: String
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(0..<words.count, id: \.self) { idx in
+                    let w = words[idx]
+                    let sess = sessions[w.targetWord.lowercased()]
+                    Button(action: {
+                        selectedCategory = "Tất cả"
+                        currentIndex = idx
+                        dismiss()
+                    }) {
+                        HStack {
+                            Circle()
+                                .fill(sess == nil ? Color.gray.opacity(0.4) : (sess!.isMatch ? Color.green : Color.red))
+                                .frame(width: 10, height: 10)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(idx + 1). \(w.targetWord)")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("\(w.hintPath) (\(w.category))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            if let s = sess {
+                                Text(s.isMatch ? "PASS" : "FAIL")
+                                    .font(.caption)
+                                    .bold()
+                                    .foregroundStyle(s.isMatch ? .green : .red)
+                            } else {
+                                Text("Chưa thu thập")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Danh sách 50 từ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Đóng") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Reevaluation Comparison Sheet View
+
+struct GlideReevaluationSheetView: View {
+    let results: [GlideReevaluationResult]
+    @Environment(\.dismiss) var dismiss
+
+    var improvedCount: Int {
+        results.filter { !$0.oldMatch && $0.newMatch }.count
+    }
+
+    var regressedCount: Int {
+        results.filter { $0.oldMatch && !$0.newMatch }.count
+    }
+
+    var totalPassed: Int {
+        results.filter { $0.newMatch }.count
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Tổng quan tái đánh giá") {
+                    HStack {
+                        Text("Số từ đã kiểm tra:")
+                        Spacer()
+                        Text("\(results.count)")
+                            .bold()
+                    }
+                    HStack {
+                        Text("Tổng từ ĐẠT mới:")
+                        Spacer()
+                        Text("\(totalPassed) / \(results.count)")
+                            .bold()
+                            .foregroundStyle(.green)
+                    }
+                    HStack {
+                        Text("Cải thiện (FAIL ➔ PASS):")
+                        Spacer()
+                        Text("+\(improvedCount)")
+                            .bold()
+                            .foregroundStyle(.green)
+                    }
+                    if regressedCount > 0 {
+                        HStack {
+                            Text("Thụt lùi (PASS ➔ FAIL):")
+                            Spacer()
+                            Text("-\(regressedCount)")
+                                .bold()
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                Section("Chi tiết từng từ") {
+                    ForEach(results) { r in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(r.targetWord)
+                                    .font(.headline)
+                                Spacer()
+                                Text(r.statusChange)
+                                    .font(.caption)
+                                    .bold()
+                                    .foregroundStyle(r.newMatch ? .green : .red)
+                            }
+                            HStack {
+                                Text("Cũ: '\(r.oldRecognizedWord)' ➔ Mới: '\(r.newRecognizedWord)'")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if !r.newTopCandidates.isEmpty {
+                                Text("Đề xuất: \(r.newTopCandidates.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+            .navigationTitle("Kết quả Tái đánh giá Engine")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Đóng") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Export Sheet View
+
+struct GlideDataExportSheetView: View {
+    let words: [GlideChallengeWord]
+    let sessions: [String: GlideRecordedSession]
+    let accuracyPercentage: Double
+    let matchUnaccented: Bool
+    @Environment(\.dismiss) var dismiss
+
+    var jsonExportString: String {
+        GlideBenchmarkStore.shared.exportJSON() ?? "{}"
+    }
+
+    var reportSummaryString: String {
+        var str = "=== BÁO CÁO THU THẬP DỮ LIỆU VUỐT PHÍM 50 TỪ ===\n"
+        str += "Thời gian: \(Date())\n"
+        str += "Tiêu chí chấm: \(matchUnaccented ? "Bỏ dấu thanh" : "Chính xác cả dấu")\n"
+        str += "Tổng số từ đã thu thập: \(sessions.count) / \(words.count)\n"
+        let pass = sessions.values.filter { $0.isMatch }.count
+        str += "Số từ nhận diện đúng: \(pass)\n"
+        str += "Độ chính xác: \(String(format: "%.1f%%", accuracyPercentage))\n\n"
+        str += "--- CHI TIẾT TỪNG TỪ ĐÃ GHI NHẬN ---\n"
+        for w in words {
+            if let s = sessions[w.targetWord.lowercased()] {
+                let status = s.isMatch ? "[PASS]" : "[FAIL]"
+                str += "\(status) '\(w.targetWord)' ➔ '\(s.recognizedWord)' (\(w.category))\n"
+                str += "       ↳ \(String(format: "%.0fms | TB: %.0fpx/s | Điểm: %d", s.durationMs, s.avgVelocityPxPerSec, s.samples.count))\n"
+                str += "       ↳ Đề xuất: \(s.topCandidates.joined(separator: ", "))\n"
+            } else {
+                str += "[CHƯA THU THẬP] '\(w.targetWord)' (\(w.category))\n"
+            }
+        }
+        return str
+    }
+
+    @State private var exportMode: Int = 1 // Mặc định mở Dữ liệu thô JSON để tiện gửi AI
+    @State private var showCopiedAlert: Bool = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 10) {
+                // Hướng dẫn cách gửi dữ liệu
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(.blue)
+                        .font(.headline)
+                    Text("Dữ liệu này chứa vệt tọa độ thực tế từ ngón tay. Bạn chỉ cần nhấn **'Sao chép để gửi AI'** rồi dán vào khung chat với AI để phân tích và tối ưu độ chuẩn xác vuốt phím.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
+                .background(Color.blue.opacity(0.08))
+                .cornerRadius(8)
+                .padding(.horizontal)
+                .padding(.top, 4)
+
+                Picker("Định dạng xuất", selection: $exportMode) {
+                    Text("Dữ liệu thô JSON (cho AI)").tag(1)
+                    Text("Báo cáo tóm tắt").tag(0)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                TextEditor(text: .constant(exportMode == 0 ? reportSummaryString : jsonExportString))
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(8)
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+
+                // Thanh hành động dưới cùng
+                VStack(spacing: 6) {
+                    if showCopiedAlert {
+                        Text("✅ Đã sao chép! Hãy dán vào khung chat với AI.")
+                            .font(.caption)
+                            .bold()
+                            .foregroundStyle(.green)
+                            .transition(.opacity)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            UIPasteboard.general.string = (exportMode == 0 ? reportSummaryString : jsonExportString)
+                            withAnimation { showCopiedAlert = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                withAnimation { showCopiedAlert = false }
+                            }
+                        }) {
+                            Label("Sao chép để gửi AI", systemImage: "doc.on.doc.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        ShareLink(item: exportMode == 0 ? reportSummaryString : jsonExportString) {
+                            Label("Chia sẻ file", systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+            .navigationTitle("Xuất / Gửi dữ liệu vuốt")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Đóng") { dismiss() }
+                }
+            }
+        }
+    }
+}

@@ -3,7 +3,8 @@ import UIKit
 import vBoardEngine
 
 /// Quản lý phản hồi xúc giác (Haptic Feedback) siêu nhạy không độ trễ
-public final class HapticManager: @unchecked Sendable {
+@MainActor
+public final class HapticManager {
     public static let shared = HapticManager()
 
     public var isEnabled: Bool {
