@@ -133,4 +133,51 @@ struct AuditVerificationTests {
         proxy.type("o", adapter: adapter)
         print("Sau khi gõ thêm 'o': '\(proxy.buffer)' (Kỳ vọng: 'hôm nay')")
     }
+
+    @Test("Kiểm tra khớp từ vuốt phím có phụ âm lặp và ca biên (Double letters & Collinear)")
+    func testGlideAdvancedEdgeCases() {
+        // 1. Từ có phụ âm lặp (ví dụ 'comment' -> người dùng chỉ lướt qua 'm' 1 lần)
+        let commentCands = WordTrie.shared.matchGlide(keySequence: Array("cvokmrebnt"), limit: 3)
+        #expect(commentCands.contains("comment"), "Phải gợi ý được 'comment' từ chuỗi cvokmrebnt")
+
+        // 2. Từ 2 ký tự cao tần có phím lướt nhiễu (ví dụ 'đi' qua 'dfyui', 'ăn' qua 'adcvbn')
+        let diCands = WordTrie.shared.matchGlide(keySequence: Array("dfyui"), limit: 3)
+        #expect(diCands.first?.lowercased() == "đi", "Chuỗi 'dfyui' phải ưu tiên từ cao tần 'đi'")
+
+        let anCands = WordTrie.shared.matchGlide(keySequence: Array("adcvbn"), limit: 3)
+        #expect(anCands.first?.lowercased() == "ăn", "Chuỗi 'adcvbn' phải ưu tiên từ cao tần 'ăn'")
+
+        // 3. Quẹt nhanh lướt phím thẳng hàng (ví dụ 'ka' cho 'khá')
+        let khaCands = WordTrie.shared.matchGlide(keySequence: Array("ka"), limit: 3)
+        #expect(khaCands.contains("khá"), "Chuỗi thẳng hàng 'ka' phải gợi ý 'khá'")
+    }
+
+    @Test("Phân tích dữ liệu thực tế từ file người dùng (nếu có)")
+    func testUserRealRecording() throws {
+        let path = "/Users/nguyenphuong/Downloads/văn bản-82381E99C24D-1.txt"
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        struct RecItem: Codable {
+            let targetWord: String
+            let primarySeq: String
+            let fullSeq: String
+            let recognizedWord: String
+            let isMatch: Bool
+            let topCandidates: [String]?
+        }
+        let items = try JSONDecoder().decode([RecItem].self, from: data)
+        var passCount = 0
+        for item in items {
+            let target = item.targetWord.lowercased()
+            let targetAscii = WordTrie.stripDiacritics(target)
+            let primaryChars = Array(item.primarySeq)
+            let cands = WordTrie.shared.matchGlide(keySequence: primaryChars, limit: 5)
+            let top = cands.first?.lowercased() ?? ""
+            let topAscii = WordTrie.stripDiacritics(top)
+            if !top.isEmpty && topAscii == targetAscii {
+                passCount += 1
+            }
+        }
+        #expect(passCount >= 50, "Tỷ lệ nhận diện từ file thực tế phải đạt ít nhất 50/59 mẫu (hiện tại: \(passCount)/\(items.count))")
+    }
 }

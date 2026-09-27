@@ -252,6 +252,19 @@ public final class WordTrie: @unchecked Sendable {
                 return [cached]
             }
 
+            // Lớp 1.5: Cắt nhiễu đuôi (Tail Truncation) — người dùng gõ thừa ký tự
+            // (ví dụ 'nhưngx' cho 'những'): thử dần các tiền tố ngắn hơn từ cuối lên
+            let trimmed = Array(lowerPrefix)
+            if trimmed.count >= 3 {
+                for cut in 1...min(3, trimmed.count - 2) {
+                    let shorter = String(trimmed.dropLast(cut))
+                    let shorterResults = lookupDirectPrefix(shorter, limit: limit)
+                    if !shorterResults.isEmpty {
+                        return shorterResults
+                    }
+                }
+            }
+
             // Lớp 2: Telex Phonotactics Normalizer (Tái cấu trúc ngữ âm Telex đảo vị trí)
             let normalized = TypoCorrectionManager.shared.normalizeTelexDisorder(input: lowerPrefix, trie: self)
             if !normalized.isEmpty {
@@ -533,31 +546,106 @@ public final class WordTrie: @unchecked Sendable {
         let lowerSeq = keySequence.map { Character($0.lowercased()) }
         guard let firstChar = lowerSeq.first, let lastChar = lowerSeq.last else { return [] }
 
-        // 1. Luôn tra cứu bucket chính xác theo phím bắt đầu và phím kết thúc
-        let primaryKey = GlideBucketKey(first: firstChar, last: lastChar)
-        var candidates = scoreGlideEntries(in: [primaryKey], lowerSeq: lowerSeq, targetFirst: firstChar, targetLast: lastChar)
-
-        // 2. Chỉ khi bucket chính xác hoàn toàn không có từ nào, mới thử dự phòng
-        // Dự phòng A: Khi ngón tay trượt quá mép phím cuối
-        if candidates.isEmpty && lowerSeq.count >= 3 {
+        // Gộp bucket chính (đầu + cuối) với các bucket dự phòng (đầu/cuối trượt lệch
+        // 1 phím) vào CÙNG MỘT lần chấm điểm theo đích THỰC của quỹ đạo. Nhờ vậy từ
+        // ở bucket dự phòng bị phạt khoảng cách không gian tới điểm chạm/nhấc tay
+        // thật (ví dụ vuốt 'v-h-o' thì 'họ' bị phạt vì bắt đầu ở 'h' thay vì 'v'),
+        // không thể đè bẹp từ đúng ở bucket chính chỉ nhờ thưởng điểm đích cục bộ.
+        var bucketKeys: [GlideBucketKey] = [GlideBucketKey(first: firstChar, last: lastChar)]
+        if lowerSeq.count >= 3 {
             let secondLast = lowerSeq[lowerSeq.count - 2]
             if secondLast != lastChar {
-                let altEndKey = GlideBucketKey(first: firstChar, last: secondLast)
-                candidates = scoreGlideEntries(in: [altEndKey], lowerSeq: lowerSeq, targetFirst: firstChar, targetLast: secondLast)
+                bucketKeys.append(GlideBucketKey(first: firstChar, last: secondLast))
             }
-        }
-
-        // Dự phòng B: Khi ngón tay chạm phím đầu bị lệch nhẹ (chỉ tra cứu khi hoàn toàn không tìm thấy từ ở phím đầu)
-        if candidates.isEmpty && lowerSeq.count >= 3 {
             let secondFirst = lowerSeq[1]
             if secondFirst != firstChar {
-                let altStartKey = GlideBucketKey(first: secondFirst, last: lastChar)
-                candidates = scoreGlideEntries(in: [altStartKey], lowerSeq: lowerSeq, targetFirst: secondFirst, targetLast: lastChar)
+                bucketKeys.append(GlideBucketKey(first: secondFirst, last: lastChar))
+            }
+        }
+        var candidates = scoreGlideEntries(
+            in: bucketKeys,
+            lowerSeq: lowerSeq,
+            targetFirst: firstChar,
+            targetLast: lastChar
+        )
+        let sortedBuckets = candidates.sorted { $0.score > $1.score }
+
+        // Lớp so khớp mềm CHỈ kích hoạt khi toàn bộ bucket (kể cả dự phòng đầu/cuối)
+        // không trả về ứng viên nào. Điều này xảy ra khi quỹ đạo bị nhiễu mạnh làm
+        // ĐẢO THỨ TỰ ký tự (ví dụ 'njugwoif' cho 'người' — u và g hoán vị), khiến
+        // so khớp chuỗi con nghiêm ngặt loại trắng mọi ứng viên. Khi bucket còn kết
+        // quả (kể cả ứng viên ngắn), xếp hạng điểm của bucket vẫn là nguồn tin đáng
+        // tin cậy hơn lớp mềm, nên trả thẳng để giữ hành vi ổn định.
+        guard sortedBuckets.isEmpty else {
+            return Array(sortedBuckets.prefix(limit).map { $0.word })
+        }
+
+        // Lớp dự phòng: so khớp mềm kiểu "túi phím" (Bag-of-Keys / Anagram).
+        // Khi quỹ đạo vuốt thực tế bị nhiễu mạnh làm ĐẢO THỨ TỰ ký tự (ví dụ
+        // 'njugwoif' cho 'người' — u và g hoán vị), so khớp chuỗi con nghiêm ngặt
+        // ở trên loại trắng toàn bộ ứng viên. Lớp này yêu cầu TỪ chứa đủ các ký tự
+        // của mình trong quỹ đạo (đếm lặp), phạt điểm theo ký tự nhiễu thay vì loại trắng.
+        let seqCounts = Dictionary(lowerSeq.map { ($0, 1) }, uniquingKeysWith: +)
+        var soft: [(word: String, score: Double)] = []
+        var seen = Set<String>()
+
+        // Duyệt các bucket có phím đầu hoặc phím cuối trùng với quỹ đạo để giới hạn phạm vi
+        var scanKeys: [GlideBucketKey] = []
+        for (key, _) in glideBuckets {
+            if key.first == firstChar || key.last == lastChar {
+                scanKeys.append(key)
             }
         }
 
-        candidates.sort { $0.score > $1.score }
-        return Array(candidates.prefix(limit).map { $0.word })
+        for key in scanKeys {
+            guard let entries = glideBuckets[key] else { continue }
+            for entry in entries {
+                let lowWord = entry.word.lowercased()
+                if seen.contains(lowWord) || UserAdaptiveLearningStore.shared.isBlacklisted(lowWord) { continue }
+
+                // Yêu cầu TỪ phải "viết được" từ các ký tự trong quỹ đạo:
+                // mỗi ký tự của từ phải xuất hiện đủ số lần trong quỹ đạo
+                let wordCounts = Dictionary(entry.asciiChars.map { ($0, 1) }, uniquingKeysWith: +)
+                var fullySpellable = true
+                for (ch, cnt) in wordCounts {
+                    guard (seqCounts[ch] ?? 0) >= cnt else {
+                        fullySpellable = false
+                        break
+                    }
+                }
+                guard fullySpellable else { continue }
+
+                // Từ không được quá ngắn so với quỹ đạo (tránh từ 3 ký tự đoạt chỗ quỹ đạo 8 ký tự)
+                guard entry.length >= max(3, Int(Double(lowerSeq.count) * 0.5)) else { continue }
+                // Từ không được dài hơn quỹ đạo (thiếu ký tự là sai chắc chắn)
+                guard entry.length <= lowerSeq.count else { continue }
+
+                // Số ký tự nhiễu = ký tự quỹ đạo không được từ sử dụng
+                var missing = 0
+                for (ch, cnt) in seqCounts {
+                    missing += max(0, cnt - (wordCounts[ch] ?? 0))
+                }
+
+                let freq = max(1, entry.frequency)
+                let logFreq = log10(Double(freq))
+                let coverage = Double(entry.length) / Double(lowerSeq.count)
+                let noisePenalty = Double(missing) * 9.0
+
+                var score = logFreq * 30.0 + coverage * 110.0 - noisePenalty
+                + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+                if let firstCh = entry.asciiChars.first, firstCh == firstChar { score += 15.0 }
+                if let lastCh = entry.asciiChars.last, lastCh == lastChar { score += 15.0 }
+
+                soft.append((word: entry.word, score: score))
+                seen.insert(lowWord)
+            }
+        }
+
+        let final = soft.sorted {
+            if $0.score != $1.score { return $0.score > $1.score }
+            return $0.word.count < $1.word.count
+        }
+        return Array(final.prefix(limit).map { $0.word })
     }
 
     /// Chấm điểm các ứng viên trong các bucket được chỉ định
@@ -576,29 +664,99 @@ public final class WordTrie: @unchecked Sendable {
                 let lowWord = entry.word.lowercased()
                 if seen.contains(lowWord) || UserAdaptiveLearningStore.shared.isBlacklisted(lowWord) { continue }
 
-                // Kiểm tra xem entry.asciiChars có phải là dãy con (subsequence) của lowerSeq không
+                // Kiểm tra xem entry.asciiChars có phải là dãy con (subsequence) của lowerSeq không.
+                // Khi vuốt phím, người dùng không thể vuốt 2 lần trên cùng 1 phím cho phụ âm/nguyên âm đôi
+                // (ví dụ 'comment' -> 'cvokmrebnt', ngón tay chỉ lướt qua 'm' 1 lần).
+                // Do đó, nếu ký tự ch trùng với ký tự vừa khớp trước đó, cho phép dùng lại vị trí cũ trong lowerSeq.
                 var sIdx = 0
                 var matched = 0
-                for ch in entry.asciiChars {
-                    while sIdx < lowerSeq.count && lowerSeq[sIdx] != ch {
-                        sIdx += 1
+                for (cIdx, ch) in entry.asciiChars.enumerated() {
+                    var foundIdx = -1
+                    var tempIdx = sIdx
+                    while tempIdx < lowerSeq.count {
+                        if lowerSeq[tempIdx] == ch {
+                            foundIdx = tempIdx
+                            break
+                        }
+                        tempIdx += 1
                     }
-                    if sIdx < lowerSeq.count && lowerSeq[sIdx] == ch {
+                    if foundIdx != -1 {
                         matched += 1
-                        sIdx += 1
+                        sIdx = foundIdx + 1
+                    } else if cIdx > 0 && ch == entry.asciiChars[cIdx - 1] {
+                        matched += 1
                     } else {
                         break
                     }
                 }
 
+                // Xử lý ca biên: Quẹt nhanh bỏ sót 1 phím nằm thẳng hàng trên đường vuốt (ví dụ 'ka' cho 'khá')
+                var isInterpolatedTransit = false
+                if matched != entry.length && lowerSeq.count == 2 && entry.length == 3 {
+                    if let f = entry.asciiChars.first, let l = entry.asciiChars.last, f == targetFirst && l == targetLast {
+                        let mid = entry.asciiChars[1]
+                        let d1 = Self.qwertyKeyDistance(targetFirst, mid)
+                        let d2 = Self.qwertyKeyDistance(mid, targetLast)
+                        let totalD = Self.qwertyKeyDistance(targetFirst, targetLast)
+                        if d1 + d2 <= totalD + 1.2 {
+                            matched = entry.length
+                            isInterpolatedTransit = true
+                        }
+                    }
+                }
+
+                // Lớp dự phòng trong bucket: khi so khớp nghiêm ngặt thất bại do quỹ đạo
+                // nhiễu làm ĐẢO THỨ TỰ ký tự (ví dụ 'njugwoif' cho 'người' — u đứng
+                // trước g), chấp nhận từ nếu MỌI ký tự của từ đều xuất hiện đủ số lần
+                // trong quỹ đạo. Phạt điểm theo số ký tự bị lệch trật tự thay vì loại trắng.
+                if matched != entry.length {
+                    // Chỉ áp dụng cho từ đủ dài so với quỹ đạo (tránh từ ngắn đoạt chỗ quỹ đạo dài)
+                    guard entry.length >= 3, entry.length >= Int(Double(lowerSeq.count) * 0.5) else { continue }
+                    // Nén các ký tự lặp liên tiếp trong từ trước khi kiểm tra số lượng
+                    let collapsedChars = entry.asciiChars.enumerated().compactMap { i, c in (i > 0 && c == entry.asciiChars[i-1]) ? nil : c }
+                    let wordCounts = Dictionary(collapsedChars.map { ($0, 1) }, uniquingKeysWith: +)
+                    let seqCounts = Dictionary(lowerSeq.map { ($0, 1) }, uniquingKeysWith: +)
+                    guard wordCounts.allSatisfy({ (seqCounts[$0.key] ?? 0) >= $0.value }) else { continue }
+
+                    let freq = max(1, entry.frequency)
+                    let logFreq = log10(Double(freq))
+                    let freqBonus = Double(freq) * 0.40
+                    let coverage = Double(entry.length) / Double(lowerSeq.count)
+                    let excessChars = Double(max(0, lowerSeq.count - entry.length))
+                    // Phạt lệch trật tự: từ không đúng thứ tự vuốt phải chịu phạt nặng
+                    let disorderPenalty = 45.0 + Double(entry.length - matched) * 15.0
+
+                    var score = logFreq * 30.0 + freqBonus + coverage * 80.0 - excessChars * 5.0 - disorderPenalty
+                    + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+                    if let firstCh = entry.asciiChars.first {
+                        let startDist = Self.qwertyKeyDistance(firstCh, targetFirst)
+                        score -= startDist * 50.0
+                        if firstCh == targetFirst { score += 20.0 }
+                    }
+                    if let lastCh = entry.asciiChars.last {
+                        let endDist = Self.qwertyKeyDistance(lastCh, targetLast)
+                        score -= endDist * 35.0
+                        if lastCh == targetLast { score += 20.0 }
+                    }
+                    if !seen.contains(lowWord) {
+                        candidates.append((word: entry.word, score: score))
+                        seen.insert(lowWord)
+                    }
+                    continue
+                }
+
                 if matched == entry.length {
                     let freq = max(1, entry.frequency)
                     let logFreq = log10(Double(freq))
+                    let freqBonus = Double(freq) * 0.40
                     let coverage = Double(entry.length) / Double(lowerSeq.count)
                     let excessChars = Double(max(0, lowerSeq.count - entry.length))
 
-                    // Điểm xác suất ngôn ngữ + độ phủ cử chỉ + phạt ký tự thừa
-                    var score = logFreq * 35.0 + coverage * 90.0 - excessChars * 6.0 + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+                    // Điểm xác suất ngôn ngữ + tần suất thực tế + độ phủ cử chỉ + phạt ký tự thừa
+                    var score = logFreq * 30.0 + freqBonus + coverage * 80.0 - excessChars * 5.0 + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+                    if isInterpolatedTransit {
+                        score -= 20.0
+                    }
 
                     // Phạt khoảng cách không gian (Spatial Distance Penalty) tới phím bắt đầu và kết thúc
                     if let firstCh = entry.asciiChars.first {
