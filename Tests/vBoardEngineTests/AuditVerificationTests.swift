@@ -154,7 +154,7 @@ struct AuditVerificationTests {
 
     @Test("Phân tích dữ liệu thực tế từ file người dùng (nếu có)")
     func testUserRealRecording() throws {
-        let path = "/Users/nguyenphuong/Downloads/văn bản-82381E99C24D-1.txt"
+        let path = "/Users/nguyenphuong/Downloads/văn bản-FB74BF2A4F88-1.txt"
         guard FileManager.default.fileExists(atPath: path) else { return }
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         struct RecItem: Codable {
@@ -167,17 +167,25 @@ struct AuditVerificationTests {
         }
         let items = try JSONDecoder().decode([RecItem].self, from: data)
         var passCount = 0
-        for item in items {
+        print("\n================== PHÂN TÍCH FILE MỚI FB74BF2A4F88-1 (50 TỪ) ==================")
+        for (i, item) in items.enumerated() {
             let target = item.targetWord.lowercased()
             let targetAscii = WordTrie.stripDiacritics(target)
             let primaryChars = Array(item.primarySeq)
-            let cands = WordTrie.shared.matchGlide(keySequence: primaryChars, limit: 5)
+            let fullChars = Array(item.fullSeq)
+            let cands = WordTrie.shared.matchGlide(keySequence: primaryChars, fullSequence: fullChars, limit: 5)
             let top = cands.first?.lowercased() ?? ""
             let topAscii = WordTrie.stripDiacritics(top)
-            if !top.isEmpty && topAscii == targetAscii {
-                passCount += 1
+            let isMatch = (!top.isEmpty && topAscii == targetAscii)
+            if isMatch { passCount += 1 }
+            let status = isMatch ? "✅ ĐẠT" : "❌ LỖI"
+            print("[\(i + 1)] '\(item.targetWord)' -> Gợi ý: \(cands) | Top: '\(top)' -> \(status)")
+            if !isMatch {
+                print("     ↳ Primary (\(item.primarySeq.count)): '\(item.primarySeq)' | Full (\(item.fullSeq.count)): '\(item.fullSeq)'")
+                print("     ↳ Trong file ghi nhận: '\(item.recognizedWord)' (Match: \(item.isMatch))")
             }
         }
+        print("TỔNG KẾT FILE MỚI: \(passCount)/\(items.count) ĐẠT (\(Double(passCount)*100.0/Double(items.count))%)")
         #expect(passCount >= 50, "Tỷ lệ nhận diện từ file thực tế phải đạt ít nhất 50/59 mẫu (hiện tại: \(passCount)/\(items.count))")
     }
 }

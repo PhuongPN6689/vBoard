@@ -539,30 +539,94 @@ public final class WordTrie: @unchecked Sendable {
         return sqrt(dr * dr + dc * dc)
     }
 
+    /// Tìm các phím lân cận trên bàn phím QWERTY chuẩn (khoảng cách <= maxDistance)
+    public static func qwertyNeighbors(of char: Character, maxDistance: Double = 1.25) -> [Character] {
+        let lower = Character(char.lowercased())
+        guard qwertyCoords[lower] != nil else { return [] }
+        return qwertyCoords.keys.filter { other in
+            other != lower && qwertyKeyDistance(lower, other) <= maxDistance
+        }
+    }
+
     /// Gợi ý từ theo quỹ đạo vuốt (Glide / Swipe Typing)
-    /// Hỗ trợ hoàn hảo tiếng Việt có dấu khi vuốt trên bàn phím QWERTY chuẩn ASCII
-    public func matchGlide(keySequence: [Character], limit: Int = 3) -> [String] {
+    /// Hỗ trợ cả primarySequence (chuỗi phím chính đã lọc) và fullSequence (chuỗi phím đầy đủ)
+    /// để kết hợp độ chính xác của lọc nhiễu với khả năng phục hồi ký tự lướt nhanh.
+    public func matchGlide(
+        keySequence: [Character],
+        fullSequence: [Character] = [],
+        limit: Int = 3
+    ) -> [String] {
+        guard keySequence.count >= 2 else { return [] }
+
+        // Nếu không có fullSequence hoặc 2 chuỗi giống nhau, tra cứu đơn lẻ
+        if fullSequence.isEmpty || fullSequence == keySequence {
+            let matches = matchGlideSingle(keySequence: keySequence, limit: limit)
+            return matches.map { $0.word }
+        }
+
+        // Kết hợp cả primary và full sequence: mỗi chuỗi tìm các ứng viên tiềm năng,
+        // sau đó gộp lại lấy điểm số cao nhất cho từng từ
+        let primaryMatches = matchGlideSingle(keySequence: keySequence, limit: limit * 2)
+        let fullMatches = matchGlideSingle(keySequence: fullSequence, limit: limit * 2)
+
+        var mergedScores: [String: Double] = [:]
+        for item in primaryMatches {
+            mergedScores[item.word] = item.score
+        }
+        for item in fullMatches {
+            if let existing = mergedScores[item.word] {
+                mergedScores[item.word] = max(existing, item.score)
+            } else {
+                mergedScores[item.word] = item.score
+            }
+        }
+
+        let sorted = mergedScores.sorted {
+            if $0.value != $1.value { return $0.value > $1.value }
+            return $0.key.count < $1.key.count
+        }
+        return Array(sorted.prefix(limit).map { $0.key })
+    }
+
+    /// Khối tra cứu vuốt phím đơn lẻ cho một chuỗi ký tự
+    private func matchGlideSingle(keySequence: [Character], limit: Int = 3) -> [(word: String, score: Double)] {
         guard keySequence.count >= 2 else { return [] }
         let lowerSeq = keySequence.map { Character($0.lowercased()) }
         guard let firstChar = lowerSeq.first, let lastChar = lowerSeq.last else { return [] }
 
-        // Gộp bucket chính (đầu + cuối) với các bucket dự phòng (đầu/cuối trượt lệch
-        // 1 phím) vào CÙNG MỘT lần chấm điểm theo đích THỰC của quỹ đạo. Nhờ vậy từ
-        // ở bucket dự phòng bị phạt khoảng cách không gian tới điểm chạm/nhấc tay
-        // thật (ví dụ vuốt 'v-h-o' thì 'họ' bị phạt vì bắt đầu ở 'h' thay vì 'v'),
-        // không thể đè bẹp từ đúng ở bucket chính chỉ nhờ thưởng điểm đích cục bộ.
+        // Gộp bucket chính (đầu + cuối) với các bucket dự phòng:
+        // 1. Phím áp chót (secondLast) và phím thứ 2 (secondFirst)
+        // 2. Các phím lân cận của phím kết thúc (nhấc tay lệch 1 phím, ví dụ 'r' cạnh 'e' trong karaoke)
+        // 3. Các phím lân cận của phím bắt đầu (chạm tay lệch 1 phím)
         var bucketKeys: [GlideBucketKey] = [GlideBucketKey(first: firstChar, last: lastChar)]
+        var addedKeys = Set<GlideBucketKey>([bucketKeys[0]])
+
+        func addKey(_ k: GlideBucketKey) {
+            if addedKeys.insert(k).inserted {
+                bucketKeys.append(k)
+            }
+        }
+
         if lowerSeq.count >= 3 {
             let secondLast = lowerSeq[lowerSeq.count - 2]
             if secondLast != lastChar {
-                bucketKeys.append(GlideBucketKey(first: firstChar, last: secondLast))
+                addKey(GlideBucketKey(first: firstChar, last: secondLast))
             }
             let secondFirst = lowerSeq[1]
             if secondFirst != firstChar {
-                bucketKeys.append(GlideBucketKey(first: secondFirst, last: lastChar))
+                addKey(GlideBucketKey(first: secondFirst, last: lastChar))
             }
         }
-        var candidates = scoreGlideEntries(
+
+        // Bổ sung các bucket lân cận của phím kết thúc và bắt đầu
+        for neighbor in Self.qwertyNeighbors(of: lastChar, maxDistance: 1.25) {
+            addKey(GlideBucketKey(first: firstChar, last: neighbor))
+        }
+        for neighbor in Self.qwertyNeighbors(of: firstChar, maxDistance: 1.25) {
+            addKey(GlideBucketKey(first: neighbor, last: lastChar))
+        }
+
+        let candidates = scoreGlideEntries(
             in: bucketKeys,
             lowerSeq: lowerSeq,
             targetFirst: firstChar,
@@ -570,26 +634,16 @@ public final class WordTrie: @unchecked Sendable {
         )
         let sortedBuckets = candidates.sorted { $0.score > $1.score }
 
-        // Lớp so khớp mềm CHỈ kích hoạt khi toàn bộ bucket (kể cả dự phòng đầu/cuối)
-        // không trả về ứng viên nào. Điều này xảy ra khi quỹ đạo bị nhiễu mạnh làm
-        // ĐẢO THỨ TỰ ký tự (ví dụ 'njugwoif' cho 'người' — u và g hoán vị), khiến
-        // so khớp chuỗi con nghiêm ngặt loại trắng mọi ứng viên. Khi bucket còn kết
-        // quả (kể cả ứng viên ngắn), xếp hạng điểm của bucket vẫn là nguồn tin đáng
-        // tin cậy hơn lớp mềm, nên trả thẳng để giữ hành vi ổn định.
+        // Nếu bucket đã có ứng viên, trả về danh sách có điểm số
         guard sortedBuckets.isEmpty else {
-            return Array(sortedBuckets.prefix(limit).map { $0.word })
+            return Array(sortedBuckets.prefix(limit))
         }
 
         // Lớp dự phòng: so khớp mềm kiểu "túi phím" (Bag-of-Keys / Anagram).
-        // Khi quỹ đạo vuốt thực tế bị nhiễu mạnh làm ĐẢO THỨ TỰ ký tự (ví dụ
-        // 'njugwoif' cho 'người' — u và g hoán vị), so khớp chuỗi con nghiêm ngặt
-        // ở trên loại trắng toàn bộ ứng viên. Lớp này yêu cầu TỪ chứa đủ các ký tự
-        // của mình trong quỹ đạo (đếm lặp), phạt điểm theo ký tự nhiễu thay vì loại trắng.
         let seqCounts = Dictionary(lowerSeq.map { ($0, 1) }, uniquingKeysWith: +)
         var soft: [(word: String, score: Double)] = []
         var seen = Set<String>()
 
-        // Duyệt các bucket có phím đầu hoặc phím cuối trùng với quỹ đạo để giới hạn phạm vi
         var scanKeys: [GlideBucketKey] = []
         for (key, _) in glideBuckets {
             if key.first == firstChar || key.last == lastChar {
@@ -645,7 +699,7 @@ public final class WordTrie: @unchecked Sendable {
             if $0.score != $1.score { return $0.score > $1.score }
             return $0.word.count < $1.word.count
         }
-        return Array(final.prefix(limit).map { $0.word })
+        return Array(final.prefix(limit))
     }
 
     /// Chấm điểm các ứng viên trong các bucket được chỉ định
@@ -665,11 +719,15 @@ public final class WordTrie: @unchecked Sendable {
                 if seen.contains(lowWord) || UserAdaptiveLearningStore.shared.isBlacklisted(lowWord) { continue }
 
                 // Kiểm tra xem entry.asciiChars có phải là dãy con (subsequence) của lowerSeq không.
-                // Khi vuốt phím, người dùng không thể vuốt 2 lần trên cùng 1 phím cho phụ âm/nguyên âm đôi
-                // (ví dụ 'comment' -> 'cvokmrebnt', ngón tay chỉ lướt qua 'm' 1 lần).
-                // Do đó, nếu ký tự ch trùng với ký tự vừa khớp trước đó, cho phép dùng lại vị trí cũ trong lowerSeq.
+                // Hỗ trợ:
+                // 1. Phụ âm/nguyên âm đôi lướt qua 1 lần (ví dụ 'comment').
+                // 2. Tối đa 1 ký tự fuzzy lân cận nếu ngón tay rẽ không tới hẳn phím đó
+                //    (ví dụ 'chào' vuốt tới 's' kề 'a', hoặc 'karaoke' nhấc tay ở 'r' kề 'e').
                 var sIdx = 0
                 var matched = 0
+                var matchedIndices: [Int] = []
+                var fuzzyPenalty: Double = 0.0
+
                 for (cIdx, ch) in entry.asciiChars.enumerated() {
                     var foundIdx = -1
                     var tempIdx = sIdx
@@ -682,9 +740,32 @@ public final class WordTrie: @unchecked Sendable {
                     }
                     if foundIdx != -1 {
                         matched += 1
+                        matchedIndices.append(foundIdx)
                         sIdx = foundIdx + 1
                     } else if cIdx > 0 && ch == entry.asciiChars[cIdx - 1] {
                         matched += 1
+                    } else if fuzzyPenalty == 0.0 {
+                        // Tìm ký tự lân cận gần nhất trong phần còn lại của quỹ đạo
+                        var bestNeighborIdx = -1
+                        var bestDist = 1.2
+                        var nIdx = sIdx
+                        while nIdx < lowerSeq.count {
+                            let dist = Self.qwertyKeyDistance(lowerSeq[nIdx], ch)
+                            if dist <= 1.15 && dist < bestDist {
+                                bestDist = dist
+                                bestNeighborIdx = nIdx
+                                break
+                            }
+                            nIdx += 1
+                        }
+                        if bestNeighborIdx != -1 {
+                            matched += 1
+                            matchedIndices.append(bestNeighborIdx)
+                            sIdx = bestNeighborIdx + 1
+                            fuzzyPenalty = 22.0
+                        } else {
+                            break
+                        }
                     } else {
                         break
                     }
@@ -730,13 +811,23 @@ public final class WordTrie: @unchecked Sendable {
                     + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
                     if let firstCh = entry.asciiChars.first {
                         let startDist = Self.qwertyKeyDistance(firstCh, targetFirst)
-                        score -= startDist * 50.0
-                        if firstCh == targetFirst { score += 20.0 }
+                        if firstCh == targetFirst {
+                            score += 25.0
+                        } else if lowerSeq.count >= 2 && lowerSeq[1] == firstCh {
+                            score -= startDist * 15.0
+                        } else {
+                            score -= startDist * 45.0
+                        }
                     }
                     if let lastCh = entry.asciiChars.last {
                         let endDist = Self.qwertyKeyDistance(lastCh, targetLast)
-                        score -= endDist * 35.0
-                        if lastCh == targetLast { score += 20.0 }
+                        if lastCh == targetLast {
+                            score += 25.0
+                        } else if lowerSeq.count >= 2 && lowerSeq[lowerSeq.count - 2] == lastCh {
+                            score -= endDist * 15.0
+                        } else {
+                            score -= endDist * 40.0
+                        }
                     }
                     if !seen.contains(lowWord) {
                         candidates.append((word: entry.word, score: score))
@@ -751,9 +842,50 @@ public final class WordTrie: @unchecked Sendable {
                     let freqBonus = Double(freq) * 0.40
                     let coverage = Double(entry.length) / Double(lowerSeq.count)
                     let excessChars = Double(max(0, lowerSeq.count - entry.length))
+                    let matchLengthBonus = Double(entry.length) * 12.0
 
-                    // Điểm xác suất ngôn ngữ + tần suất thực tế + độ phủ cử chỉ + phạt ký tự thừa
-                    var score = logFreq * 30.0 + freqBonus + coverage * 80.0 - excessChars * 5.0 + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+                    // Phạt bỏ sót phím ngoặt lớn (Detour Deviation Penalty):
+                    // Tính độ lệch (đoạn rẽ) của các ký tự không khớp so với đường đi giữa các ký tự đã khớp.
+                    // Nếu ký tự nằm trên đường thẳng nối 2 phím khớp (ví dụ lướt qua phím hàng giữa từ 'l' đến 'a'),
+                    // độ lệch tam giác d(p, j) + d(j, q) - d(p, q) gần bằng 0 -> Không bị phạt!
+                    // Nhưng nếu người dùng rẽ ngón tay sang vùng phím khác (như phím 'a' trong 'kjhoang'),
+                    // độ lệch sẽ rất lớn -> Phạt nặng từ ứng viên bỏ qua khúc rẽ này.
+                    var detourMissPenalty: Double = 0.0
+                    if !matchedIndices.isEmpty && lowerSeq.count > entry.length {
+                        let sortedMatched = matchedIndices.sorted()
+                        let matchedSet = Set(sortedMatched)
+                        for j in 0..<lowerSeq.count {
+                            if !matchedSet.contains(j) {
+                                let ch = lowerSeq[j]
+                                let prevIdx = sortedMatched.last(where: { $0 < j })
+                                let nextIdx = sortedMatched.first(where: { $0 > j })
+
+                                var deviation = 0.0
+                                if let p = prevIdx, let q = nextIdx {
+                                    let d1 = Self.qwertyKeyDistance(lowerSeq[p], ch)
+                                    let d2 = Self.qwertyKeyDistance(ch, lowerSeq[q])
+                                    let dDirect = Self.qwertyKeyDistance(lowerSeq[p], lowerSeq[q])
+                                    deviation = d1 + d2 - dDirect
+                                } else if let p = prevIdx {
+                                    deviation = Self.qwertyKeyDistance(lowerSeq[p], ch)
+                                } else if let q = nextIdx {
+                                    deviation = Self.qwertyKeyDistance(ch, lowerSeq[q])
+                                }
+
+                                if deviation > 1.8 {
+                                    detourMissPenalty += (deviation - 1.8) * 12.0
+                                }
+                            }
+                        }
+                    }
+
+                    // Với các từ 2 chữ cực cao tần (core từ điển như 'là', 'và', 'có', 'đi'),
+                    // giảm nhẹ phạt ký tự thừa và cộng thưởng ưu tiên cốt lõi
+                    let excessPenaltyFactor = (entry.length == 2 && entry.frequency >= 250) ? 2.5 : 5.0
+                    let coreWordBonus = (entry.frequency >= 250) ? 25.0 : 0.0
+
+                    // Điểm xác suất ngôn ngữ + tần suất thực tế + độ phủ cử chỉ + thưởng độ dài từ - phạt ký tự thừa & phím ngoặt
+                    var score = logFreq * 30.0 + freqBonus + coverage * 80.0 + matchLengthBonus + coreWordBonus - excessChars * excessPenaltyFactor - detourMissPenalty - fuzzyPenalty + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
                     if isInterpolatedTransit {
                         score -= 20.0
                     }
@@ -761,16 +893,22 @@ public final class WordTrie: @unchecked Sendable {
                     // Phạt khoảng cách không gian (Spatial Distance Penalty) tới phím bắt đầu và kết thúc
                     if let firstCh = entry.asciiChars.first {
                         let startDist = Self.qwertyKeyDistance(firstCh, targetFirst)
-                        score -= startDist * 50.0
                         if firstCh == targetFirst {
-                            score += 20.0
+                            score += 25.0
+                        } else if lowerSeq.count >= 2 && lowerSeq[1] == firstCh {
+                            score -= startDist * 15.0
+                        } else {
+                            score -= startDist * 45.0
                         }
                     }
                     if let lastCh = entry.asciiChars.last {
                         let endDist = Self.qwertyKeyDistance(lastCh, targetLast)
-                        score -= endDist * 35.0
                         if lastCh == targetLast {
-                            score += 20.0
+                            score += 25.0
+                        } else if lowerSeq.count >= 2 && lowerSeq[lowerSeq.count - 2] == lastCh {
+                            score -= endDist * 15.0
+                        } else {
+                            score -= endDist * 40.0
                         }
                     }
 

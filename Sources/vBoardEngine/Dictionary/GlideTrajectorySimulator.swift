@@ -249,10 +249,7 @@ public final class GlideTrajectorySimulator: Sendable {
         }
 
         let (primary, full) = tracker.extractTargetKeySequence()
-        var rawMatches = WordTrie.shared.matchGlide(keySequence: primary, limit: 3)
-        if rawMatches.isEmpty && full != primary {
-            rawMatches = WordTrie.shared.matchGlide(keySequence: full, limit: 3)
-        }
+        let rawMatches = WordTrie.shared.matchGlide(keySequence: primary, fullSequence: full, limit: 3)
 
         let topWord = rawMatches.first ?? ""
         let isMatch: Bool
@@ -285,10 +282,7 @@ public final class GlideTrajectorySimulator: Sendable {
         }
 
         let (primary, full) = tracker.extractTargetKeySequence()
-        var rawMatches = WordTrie.shared.matchGlide(keySequence: primary, limit: 3)
-        if rawMatches.isEmpty && full != primary {
-            rawMatches = WordTrie.shared.matchGlide(keySequence: full, limit: 3)
-        }
+        let rawMatches = WordTrie.shared.matchGlide(keySequence: primary, fullSequence: full, limit: 3)
 
         let topWord = rawMatches.first ?? ""
         let isMatch: Bool

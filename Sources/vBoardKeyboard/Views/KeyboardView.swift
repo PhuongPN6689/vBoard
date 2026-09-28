@@ -547,10 +547,7 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
                 // Lấy chuỗi phím đã lọc bỏ các phím lướt qua (dựa trên profile vận tốc và góc đổi hướng)
                 let (primarySeq, fullSeq) = GlideKinematicsTracker.shared.extractTargetKeySequence()
-                var rawMatches = WordTrie.shared.matchGlide(keySequence: primarySeq, limit: 3)
-                if rawMatches.isEmpty && fullSeq != primarySeq {
-                    rawMatches = WordTrie.shared.matchGlide(keySequence: fullSeq, limit: 3)
-                }
+                var rawMatches = WordTrie.shared.matchGlide(keySequence: primarySeq, fullSequence: fullSeq, limit: 3)
                 if rawMatches.isEmpty && !glideTrackedChars.isEmpty {
                     rawMatches = WordTrie.shared.matchGlide(keySequence: glideTrackedChars, limit: 3)
                 }

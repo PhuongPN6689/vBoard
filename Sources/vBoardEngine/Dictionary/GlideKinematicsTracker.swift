@@ -295,10 +295,7 @@ public final class GlideKinematicsTracker: @unchecked Sendable {
         }
 
         let (primary, full) = tracker.extractTargetKeySequence()
-        var rawMatches = WordTrie.shared.matchGlide(keySequence: primary, limit: 5)
-        if rawMatches.isEmpty && full != primary {
-            rawMatches = WordTrie.shared.matchGlide(keySequence: full, limit: 5)
-        }
+        let rawMatches = WordTrie.shared.matchGlide(keySequence: primary, fullSequence: full, limit: 5)
 
         let topWord = rawMatches.first ?? ""
         let isMatch: Bool
