@@ -45,12 +45,14 @@ public struct GlideBenchmarkView: View {
     public enum BenchmarkWordSet: String, CaseIterable, Identifiable {
         case standard50 = "Bộ 50 từ chuẩn"
         case random100 = "Bộ 100 từ ngẫu nhiên"
+        case top1000 = "Bộ 1000 từ phổ biến"
 
         public var id: String { rawValue }
         public var shortTitle: String {
             switch self {
             case .standard50: return "50 từ chuẩn"
             case .random100: return "100 từ ngẫu nhiên"
+            case .top1000: return "1000 từ phổ biến"
             }
         }
     }
@@ -152,6 +154,63 @@ public struct GlideBenchmarkView: View {
     var accuracyPercentage: Double {
         guard recordedCount > 0 else { return 0.0 }
         return (Double(passCount) / Double(recordedCount)) * 100.0
+    }
+
+    /// Tổng điểm trọng số (Top 1 = 1.0đ, Top 2 = 0.75đ, Top 3 = 0.5đ, ngoài Top 3 = 0.0đ)
+    var totalWeightedScore: Double {
+        words.reduce(0.0) { sum, word in
+            if let sess = sessions[word.targetWord.lowercased()] {
+                return sum + sess.weightedScore(matchUnaccented: matchUnaccentedOnly)
+            }
+            return sum
+        }
+    }
+
+    /// Tỷ lệ phần trăm điểm trọng số đạt được
+    var weightedAccuracyPercentage: Double {
+        guard recordedCount > 0 else { return 0.0 }
+        return (totalWeightedScore / Double(recordedCount)) * 100.0
+    }
+
+    /// Số từ đạt Top 1 (1.0 điểm)
+    var top1Count: Int {
+        words.filter { word in
+            if let sess = sessions[word.targetWord.lowercased()] {
+                return sess.targetRank(matchUnaccented: matchUnaccentedOnly) == 1
+            }
+            return false
+        }.count
+    }
+
+    /// Số từ đạt Top 2 (0.75 điểm)
+    var top2Count: Int {
+        words.filter { word in
+            if let sess = sessions[word.targetWord.lowercased()] {
+                return sess.targetRank(matchUnaccented: matchUnaccentedOnly) == 2
+            }
+            return false
+        }.count
+    }
+
+    /// Số từ đạt Top 3 (0.5 điểm)
+    var top3Count: Int {
+        words.filter { word in
+            if let sess = sessions[word.targetWord.lowercased()] {
+                return sess.targetRank(matchUnaccented: matchUnaccentedOnly) == 3
+            }
+            return false
+        }.count
+    }
+
+    /// Tổng số từ xuất hiện trong Top 3 (thanh gợi ý bàn phím)
+    var top3HitCount: Int {
+        top1Count + top2Count + top3Count
+    }
+
+    /// Tỷ lệ lọt Top 3 (hiển thị trên thanh gợi ý)
+    var top3HitPercentage: Double {
+        guard recordedCount > 0 else { return 0.0 }
+        return (Double(top3HitCount) / Double(recordedCount)) * 100.0
     }
 
     public var body: some View {
@@ -329,6 +388,12 @@ public struct GlideBenchmarkView: View {
                                 if activeSet == .random100 { Image(systemName: "checkmark") }
                             }
                         }
+                        Button(action: { switchWordSet(to: .top1000) }) {
+                            HStack {
+                                Text("Bộ 1000 từ phổ biến nhất từ điển")
+                                if activeSet == .top1000 { Image(systemName: "checkmark") }
+                            }
+                        }
                         if activeSet == .random100 {
                             Button(action: regenerateRandom100) {
                                 Label("Tạo lại 100 từ ngẫu nhiên mới", systemImage: "dice")
@@ -370,6 +435,13 @@ public struct GlideBenchmarkView: View {
                 words: words,
                 sessions: sessions,
                 accuracyPercentage: accuracyPercentage,
+                totalWeightedScore: totalWeightedScore,
+                weightedAccuracyPercentage: weightedAccuracyPercentage,
+                top1Count: top1Count,
+                top2Count: top2Count,
+                top3Count: top3Count,
+                top3HitCount: top3HitCount,
+                top3HitPercentage: top3HitPercentage,
                 matchUnaccented: matchUnaccentedOnly
             )
         }
@@ -393,7 +465,7 @@ public struct GlideBenchmarkView: View {
 
     private var headerStatsSection: some View {
         VStack(spacing: 8) {
-            // Thanh chuyển đổi nhanh bộ từ kiểm thử: 50 từ chuẩn vs 100 từ ngẫu nhiên
+            // Thanh chuyển đổi nhanh bộ từ kiểm thử: 50 từ chuẩn vs 100 từ ngẫu nhiên vs 1000 từ phổ biến
             HStack(spacing: 8) {
                 Picker("Bộ từ", selection: $activeSet) {
                     ForEach(BenchmarkWordSet.allCases) { item in
@@ -419,9 +491,10 @@ public struct GlideBenchmarkView: View {
                 }
             }
 
+            // Hàng 1: Tiến độ và Điểm trọng số
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Dữ liệu đã thu thập")
+                    Text("Tiến độ thu thập")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text("\(recordedCount) / \(words.count) từ")
@@ -436,14 +509,20 @@ public struct GlideBenchmarkView: View {
                 .cornerRadius(10)
 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("Độ chính xác")
+                    Text("Điểm trọng số (1.0 | 0.75 | 0.5)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    Text(String(format: "%.1f%%", accuracyPercentage))
-                        .font(.headline)
-                        .bold()
-                        .foregroundStyle(accuracyPercentage >= 80 ? .green : (accuracyPercentage >= 50 ? .orange : .red))
-                    Text("PASS: \(passCount) | FAIL: \(recordedCount - passCount)")
+                    HStack(spacing: 4) {
+                        Text(String(format: "%.2f", totalWeightedScore))
+                            .font(.headline)
+                            .bold()
+                            .foregroundStyle(.blue)
+                        Text(String(format: "(%.1f%%)", weightedAccuracyPercentage))
+                            .font(.caption)
+                            .bold()
+                            .foregroundStyle(weightedAccuracyPercentage >= 80 ? .green : (weightedAccuracyPercentage >= 50 ? .orange : .red))
+                    }
+                    Text("Top 3 (Thanh gợi ý): \(top3HitCount)/\(recordedCount) (\(String(format: "%.1f%%", top3HitPercentage)))")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -451,6 +530,44 @@ public struct GlideBenchmarkView: View {
                 .padding(10)
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(10)
+            }
+
+            // Hàng 2: Chi tiết phân bổ Top 1, Top 2, Top 3, Ngoài Top 3
+            if recordedCount > 0 {
+                HStack(spacing: 6) {
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.green).frame(width: 6, height: 6)
+                        Text("Top 1: \(top1Count)")
+                            .font(.caption2)
+                            .bold()
+                    }
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.blue).frame(width: 6, height: 6)
+                        Text("Top 2: \(top2Count)")
+                            .font(.caption2)
+                            .bold()
+                    }
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.orange).frame(width: 6, height: 6)
+                        Text("Top 3: \(top3Count)")
+                            .font(.caption2)
+                            .bold()
+                    }
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.red).frame(width: 6, height: 6)
+                        Text("Ngoài Top 3: \(recordedCount - top3HitCount)")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
             }
         }
     }
@@ -492,20 +609,22 @@ public struct GlideBenchmarkView: View {
 
                 Spacer()
 
-                // Badge trạng thái đã thu thập
+                // Badge trạng thái đã thu thập kèm thứ hạng và điểm
                 if let sess = currentSession {
+                    let rank = sess.targetRank(matchUnaccented: matchUnaccentedOnly)
+                    let score = sess.weightedScore(matchUnaccented: matchUnaccentedOnly)
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(sess.isMatch ? Color.green : Color.red)
+                            .fill(rank == 1 ? Color.green : (rank == 2 ? Color.blue : (rank == 3 ? Color.orange : Color.red)))
                             .frame(width: 8, height: 8)
-                        Text(sess.isMatch ? "ĐẠT (PASS)" : "LỖI (FAIL)")
+                        Text(sess.rankLabel(matchUnaccented: matchUnaccentedOnly))
                             .font(.caption2)
                             .bold()
-                            .foregroundStyle(sess.isMatch ? .green : .red)
+                            .foregroundStyle(rank == 1 ? .green : (rank == 2 ? .blue : (rank == 3 ? .orange : .red)))
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background((sess.isMatch ? Color.green : Color.red).opacity(0.12))
+                    .background((rank == 1 ? Color.green : (rank == 2 ? Color.blue : (rank == 3 ? Color.orange : Color.red))).opacity(0.12))
                     .cornerRadius(6)
                 } else {
                     Text("Chưa thu thập")
@@ -552,17 +671,19 @@ public struct GlideBenchmarkView: View {
     private var resultAndTelemetryCard: some View {
         Group {
             if let sess = currentSession {
+                let rank = sess.targetRank(matchUnaccented: matchUnaccentedOnly)
+                let score = sess.weightedScore(matchUnaccented: matchUnaccentedOnly)
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Image(systemName: sess.isMatch ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        Image(systemName: rank > 0 ? (rank == 1 ? "crown.fill" : "checkmark.circle.fill") : "xmark.circle.fill")
                             .font(.title3)
-                            .foregroundStyle(sess.isMatch ? .green : .red)
+                            .foregroundStyle(rank == 1 ? .green : (rank == 2 ? .blue : (rank == 3 ? .orange : .red)))
 
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(sess.isMatch ? "Nhận diện chính xác!" : "Nhận diện sai!")
+                            Text(rank > 0 ? "Lọt Top gợi ý: \(sess.rankLabel(matchUnaccented: matchUnaccentedOnly))" : "Ngoài Top 3 gợi ý (0 điểm)")
                                 .font(.subheadline)
                                 .bold()
-                                .foregroundStyle(sess.isMatch ? .green : .red)
+                                .foregroundStyle(rank == 1 ? .green : (rank == 2 ? .blue : (rank == 3 ? .orange : .red)))
                             Text("Kết quả ra: '\(sess.recognizedWord.isEmpty ? "(Không khớp từ nào)" : sess.recognizedWord)'")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -804,6 +925,8 @@ public struct GlideBenchmarkView: View {
             words = GlideBenchmarkStore.default50Words
         case .random100:
             words = GlideBenchmarkStore.generateRandom100Words()
+        case .top1000:
+            words = GlideBenchmarkStore.getTop1000Words()
         }
         resetPlaybackState()
     }
@@ -862,8 +985,9 @@ struct GlideWordListSheetView: View {
                         dismiss()
                     }) {
                         HStack {
+                            let rank = sess?.targetRank(matchUnaccented: true) ?? 0
                             Circle()
-                                .fill(sess == nil ? Color.gray.opacity(0.4) : (sess!.isMatch ? Color.green : Color.red))
+                                .fill(sess == nil ? Color.gray.opacity(0.4) : (rank == 1 ? Color.green : (rank == 2 ? Color.blue : (rank == 3 ? Color.orange : Color.red))))
                                 .frame(width: 10, height: 10)
 
                             VStack(alignment: .leading, spacing: 2) {
@@ -878,10 +1002,10 @@ struct GlideWordListSheetView: View {
                             Spacer()
 
                             if let s = sess {
-                                Text(s.isMatch ? "PASS" : "FAIL")
+                                Text(s.rankLabel(matchUnaccented: true))
                                     .font(.caption)
                                     .bold()
-                                    .foregroundStyle(s.isMatch ? .green : .red)
+                                    .foregroundStyle(rank == 1 ? .green : (rank == 2 ? .blue : (rank == 3 ? .orange : .red)))
                             } else {
                                 Text("Chưa thu thập")
                                     .font(.caption2)
@@ -920,9 +1044,55 @@ struct GlideReevaluationSheetView: View {
         results.filter { $0.newMatch }.count
     }
 
+    var totalWeightedScore: Double {
+        results.reduce(0.0) { $0 + $1.newWeightedScore }
+    }
+
+    var top1Count: Int {
+        results.filter { $0.newRank == 1 }.count
+    }
+
+    var top2Count: Int {
+        results.filter { $0.newRank == 2 }.count
+    }
+
+    var top3Count: Int {
+        results.filter { $0.newRank == 3 }.count
+    }
+
+    var top3HitCount: Int {
+        results.filter { $0.newRank > 0 }.count
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                Section("Thống kê Thang điểm Trọng số") {
+                    HStack {
+                        Text("Tổng điểm trọng số:")
+                        Spacer()
+                        let pct = results.isEmpty ? 0.0 : (totalWeightedScore / Double(results.count)) * 100.0
+                        Text("\(String(format: "%.2f", totalWeightedScore)) / \(results.count)đ (\(String(format: "%.1f%%", pct)))")
+                            .bold()
+                            .foregroundStyle(.blue)
+                    }
+                    HStack {
+                        Text("Lọt Top 3 gợi ý:")
+                        Spacer()
+                        let hitPct = results.isEmpty ? 0.0 : (Double(top3HitCount) / Double(results.count)) * 100.0
+                        Text("\(top3HitCount) / \(results.count) (\(String(format: "%.1f%%", hitPct)))")
+                            .bold()
+                            .foregroundStyle(.green)
+                    }
+                    HStack {
+                        Text("Phân bố thứ hạng:")
+                        Spacer()
+                        Text("Top 1: \(top1Count) | Top 2: \(top2Count) | Top 3: \(top3Count)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("Tổng quan tái đánh giá") {
                     HStack {
                         Text("Số từ đã kiểm tra:")
@@ -962,15 +1132,19 @@ struct GlideReevaluationSheetView: View {
                                 Text(r.targetWord)
                                     .font(.headline)
                                 Spacer()
-                                Text(r.statusChange)
+                                Text(r.newRankLabel)
                                     .font(.caption)
                                     .bold()
-                                    .foregroundStyle(r.newMatch ? .green : .red)
+                                    .foregroundStyle(r.newRank == 1 ? .green : (r.newRank == 2 ? .blue : (r.newRank == 3 ? .orange : .red)))
                             }
                             HStack {
                                 Text("Cũ: '\(r.oldRecognizedWord)' ➔ Mới: '\(r.newRecognizedWord)'")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(r.statusChange)
+                                    .font(.caption2)
+                                    .foregroundStyle(r.newMatch ? .green : .secondary)
                             }
                             if !r.newTopCandidates.isEmpty {
                                 Text("Đề xuất: \(r.newTopCandidates.joined(separator: ", "))")
@@ -999,6 +1173,13 @@ struct GlideDataExportSheetView: View {
     let words: [GlideChallengeWord]
     let sessions: [String: GlideRecordedSession]
     let accuracyPercentage: Double
+    let totalWeightedScore: Double
+    let weightedAccuracyPercentage: Double
+    let top1Count: Int
+    let top2Count: Int
+    let top3Count: Int
+    let top3HitCount: Int
+    let top3HitPercentage: Double
     let matchUnaccented: Bool
     @Environment(\.dismiss) var dismiss
 
@@ -1011,14 +1192,21 @@ struct GlideDataExportSheetView: View {
         str += "Thời gian: \(Date())\n"
         str += "Tiêu chí chấm: \(matchUnaccented ? "Bỏ dấu thanh" : "Chính xác cả dấu")\n"
         str += "Tổng số từ đã thu thập: \(sessions.count) / \(words.count)\n"
-        let pass = sessions.values.filter { $0.isMatch }.count
-        str += "Số từ nhận diện đúng: \(pass)\n"
-        str += "Độ chính xác: \(String(format: "%.1f%%", accuracyPercentage))\n\n"
+        str += "--- THANG ĐIỂM TRỌNG SỐ GỢI Ý ---\n"
+        str += "  • Điểm tổng: \(String(format: "%.2f", totalWeightedScore)) / \(sessions.count) điểm (\(String(format: "%.1f%%", weightedAccuracyPercentage)))\n"
+        str += "  • Lọt Top 3 gợi ý: \(top3HitCount) / \(sessions.count) (\(String(format: "%.1f%%", top3HitPercentage)))\n"
+        str += "  • Top 1 (1.0 điểm): \(top1Count) từ\n"
+        str += "  • Top 2 (0.75 điểm): \(top2Count) từ\n"
+        str += "  • Top 3 (0.5 điểm): \(top3Count) từ\n"
+        let outOfTop3 = sessions.count - top3HitCount
+        str += "  • Ngoài Top 3 (0 điểm): \(outOfTop3) từ\n\n"
         str += "--- CHI TIẾT TỪNG TỪ ĐÃ GHI NHẬN ---\n"
         for w in words {
             if let s = sessions[w.targetWord.lowercased()] {
-                let status = s.isMatch ? "[PASS]" : "[FAIL]"
-                str += "\(status) '\(w.targetWord)' ➔ '\(s.recognizedWord)' (\(w.category))\n"
+                let rank = s.targetRank(matchUnaccented: matchUnaccented)
+                let score = s.weightedScore(matchUnaccented: matchUnaccented)
+                let rankText = rank > 0 ? "[TOP \(rank) - \(score)đ]" : "[NGOÀI TOP 3 - 0đ]"
+                str += "\(rankText) '\(w.targetWord)' ➔ '\(s.recognizedWord)' (\(w.category))\n"
                 str += "       ↳ \(String(format: "%.0fms | TB: %.0fpx/s | Điểm: %d", s.durationMs, s.avgVelocityPxPerSec, s.samples.count))\n"
                 str += "       ↳ Đề xuất: \(s.topCandidates.joined(separator: ", "))\n"
             } else {

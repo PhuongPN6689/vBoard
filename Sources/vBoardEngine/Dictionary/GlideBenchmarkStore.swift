@@ -126,6 +126,44 @@ public struct GlideRecordedSession: Identifiable, Codable, Sendable {
             keyboardHeight: keyboardHeight
         )
     }
+
+    /// Vị trí thứ hạng của từ mục tiêu trong danh sách gợi ý (1: Top 1, 2: Top 2, 3: Top 3, 0: Ngoài Top 3 hoặc không tìm thấy)
+    public func targetRank(matchUnaccented: Bool = true) -> Int {
+        let target = matchUnaccented ? WordTrie.stripDiacritics(targetWord.lowercased()) : targetWord.lowercased()
+        for (index, candidate) in topCandidates.enumerated() {
+            let cand = matchUnaccented ? WordTrie.stripDiacritics(candidate.lowercased()) : candidate.lowercased()
+            if cand == target {
+                return index + 1
+            }
+        }
+        return 0
+    }
+
+    /// Điểm đánh giá theo quy tắc trọng số gợi ý bàn phím:
+    /// - Top 1: 1.0 điểm
+    /// - Top 2: 0.75 điểm
+    /// - Top 3: 0.5 điểm
+    /// - Ngoài Top 3 / Không có: 0.0 điểm
+    public func weightedScore(matchUnaccented: Bool = true) -> Double {
+        let rank = targetRank(matchUnaccented: matchUnaccented)
+        switch rank {
+        case 1: return 1.0
+        case 2: return 0.75
+        case 3: return 0.5
+        default: return 0.0
+        }
+    }
+
+    /// Nhãn hiển thị thứ hạng và điểm
+    public func rankLabel(matchUnaccented: Bool = true) -> String {
+        let rank = targetRank(matchUnaccented: matchUnaccented)
+        switch rank {
+        case 1: return "Top 1 (1.0đ)"
+        case 2: return "Top 2 (0.75đ)"
+        case 3: return "Top 3 (0.5đ)"
+        default: return "Ngoài Top 3 (0đ)"
+        }
+    }
 }
 
 /// Kho quản lý và lưu trữ dữ liệu kiểm thử cử chỉ vuốt phím
@@ -260,6 +298,69 @@ public final class GlideBenchmarkStore: @unchecked Sendable {
         }
 
         return results
+    }
+
+    // MARK: - Bộ 1000 từ phổ biến nhất từ từ điển tiếng Việt
+    public static func getTop1000Words() -> [GlideChallengeWord] {
+        var content: String? = nil
+        #if SWIFT_PACKAGE
+        if let resourceURL = Bundle.module.url(forResource: "vietnamese_words", withExtension: "txt"),
+           let c = try? String(contentsOf: resourceURL, encoding: .utf8) {
+            content = c
+        }
+        #endif
+
+        if content == nil {
+            let fileManager = FileManager.default
+            if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.com.nguyenphuong.vBoard") {
+                let customLexiconURL = groupURL.appendingPathComponent("vietnamese_words.txt")
+                if let c = try? String(contentsOf: customLexiconURL, encoding: .utf8) {
+                    content = c
+                }
+            }
+        }
+
+        if content == nil {
+            var bundles: [Bundle] = [Bundle.main]
+            bundles.append(contentsOf: Bundle.allBundles)
+            bundles.append(contentsOf: Bundle.allFrameworks)
+            for b in bundles {
+                if let url = b.url(forResource: "vietnamese_words", withExtension: "txt"),
+                   let c = try? String(contentsOf: url, encoding: .utf8) {
+                    content = c
+                    break
+                }
+            }
+        }
+
+        guard let text = content else {
+            return generateRandom100Words()
+        }
+
+        var words: [GlideChallengeWord] = []
+        var seen = Set<String>()
+
+        for line in text.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let parts = trimmed.split(separator: ",")
+            guard let wordPart = parts.first else { continue }
+            let w = String(wordPart).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if w.contains(" ") || w.contains("-") { continue }
+            // Lọc các từ ngoại lai mượn chứa f, j, w, z
+            if w.contains("f") || w.contains("j") || w.contains("w") || w.contains("z") { continue }
+            let ascii = WordTrie.stripDiacritics(w)
+            if ascii.contains("f") || ascii.contains("j") || ascii.contains("w") || ascii.contains("z") { continue }
+            if ascii.count < 2 || ascii.count > 7 { continue }
+            if seen.insert(w).inserted {
+                let path = ascii.map { String($0) }.joined(separator: " - ")
+                let cat = "Từ \(ascii.count) ký tự"
+                words.append(GlideChallengeWord(targetWord: w, hintPath: path, category: cat, note: "Top \(words.count + 1) từ điển"))
+                if words.count >= 1000 { break }
+            }
+        }
+
+        return words.isEmpty ? generateRandom100Words() : words
     }
 
     private var recordedSessions: [String: GlideRecordedSession] = [:] // key: targetWord
@@ -431,6 +532,38 @@ public struct GlideReevaluationResult: Identifiable, Sendable {
             return "DUY TRÌ ĐẠT (PASS)"
         } else {
             return "VẪN LỖI (FAIL)"
+        }
+    }
+
+    /// Thứ hạng của từ mục tiêu trong danh sách gợi ý mới (1: Top 1, 2: Top 2, 3: Top 3, 0: Ngoài Top 3)
+    public var newRank: Int {
+        let target = WordTrie.stripDiacritics(targetWord.lowercased())
+        for (index, candidate) in newTopCandidates.enumerated() {
+            let cand = WordTrie.stripDiacritics(candidate.lowercased())
+            if cand == target {
+                return index + 1
+            }
+        }
+        return 0
+    }
+
+    /// Điểm trọng số gợi ý (Top 1 = 1.0, Top 2 = 0.75, Top 3 = 0.5, ngoài Top 3 = 0.0)
+    public var newWeightedScore: Double {
+        switch newRank {
+        case 1: return 1.0
+        case 2: return 0.75
+        case 3: return 0.5
+        default: return 0.0
+        }
+    }
+
+    /// Nhãn hiển thị thứ hạng và điểm mới
+    public var newRankLabel: String {
+        switch newRank {
+        case 1: return "Top 1 (1.0đ)"
+        case 2: return "Top 2 (0.75đ)"
+        case 3: return "Top 3 (0.5đ)"
+        default: return "Ngoài Top 3 (0đ)"
         }
     }
 }
