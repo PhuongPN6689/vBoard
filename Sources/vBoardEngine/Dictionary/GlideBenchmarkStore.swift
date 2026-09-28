@@ -191,12 +191,76 @@ public final class GlideBenchmarkStore: @unchecked Sendable {
         GlideChallengeWord(targetWord: "khoảng", hintPath: "k - h - o - a - n - g", category: "Từ 6 ký tự", note: "k -> h -> o -> a -> n -> g"),
         GlideChallengeWord(targetWord: "phương", hintPath: "p - h - u - o - n - g", category: "Từ 6 ký tự", note: "p -> h -> u -> o -> n -> g"),
 
-        // 6. Nhóm từ 7 ký tự (4 từ)
+        // 6. Nhóm từ 6 - 7 ký tự thuần Việt (4 từ)
         GlideChallengeWord(targetWord: "nghiêng", hintPath: "n - g - h - i - e - n - g", category: "Từ 7 ký tự", note: "Từ thuần Việt 7 ký tự"),
-        GlideChallengeWord(targetWord: "voucher", hintPath: "v - o - u - c - h - e - r", category: "Từ 7 ký tự", note: "Từ mượn 7 ký tự"),
-        GlideChallengeWord(targetWord: "comment", hintPath: "c - o - m - m - e - n - t", category: "Từ 7 ký tự", note: "Từ mượn 7 ký tự"),
-        GlideChallengeWord(targetWord: "karaoke", hintPath: "k - a - r - a - o - k - e", category: "Từ 7 ký tự", note: "Từ mượn 7 ký tự")
+        GlideChallengeWord(targetWord: "thuyền", hintPath: "t - h - u - y - e - n", category: "Từ 6 ký tự", note: "Từ thuần Việt 6 ký tự"),
+        GlideChallengeWord(targetWord: "khuyên", hintPath: "k - h - u - y - e - n", category: "Từ 6 ký tự", note: "Từ thuần Việt 6 ký tự"),
+        GlideChallengeWord(targetWord: "nguyện", hintPath: "n - g - u - y - e - n", category: "Từ 6 ký tự", note: "Từ thuần Việt 6 ký tự")
     ]
+
+    // MARK: - Bộ 100 từ ngẫu nhiên cân bằng từ từ điển tiếng Việt
+    public static func generateRandom100Words() -> [GlideChallengeWord] {
+        let pool2 = [
+            "là", "có", "đi", "và", "ra", "về", "ăn", "ơi", "mẹ", "bố",
+            "vợ", "con", "ai", "ta", "do", "lo", "nó", "họ", "xa", "bé",
+            "cả", "em", "ba", "má", "gì"
+        ]
+        let pool3 = [
+            "tôi", "làm", "yêu", "vui", "nói", "học", "hoa", "nhà", "rất", "khi",
+            "cho", "tay", "mắt", "cây", "mưa", "gió", "tim", "cơm", "đất", "mặt",
+            "bạn", "xe", "bàn", "sao", "tiền", "mai", "đêm", "đầu", "chân", "tin"
+        ]
+        let pool4 = [
+            "được", "phải", "mình", "biết", "muốn", "cuộc", "buồn", "nghĩ", "chào", "vàng",
+            "rượu", "sách", "nước", "bước", "thời", "gian", "sống", "lòng", "nắng", "trời",
+            "tiếng", "bóng", "sông", "ngày", "màu", "thần", "sáng", "chim", "trăng", "xanh"
+        ]
+        let pool5 = [
+            "không", "người", "nhưng", "chúng", "nhiều", "trong", "trước", "nhanh", "thành", "hoàng",
+            "chiếc", "nghĩa", "chiều", "tháng", "quanh", "ngang", "ngoài", "chuẩn", "trắng", "nghèo",
+            "thẳng", "hướng", "trang", "đường", "thương"
+        ]
+        let pool6 = [
+            "thương", "trường", "chuyện", "khoảng", "phương", "thuyền", "khuyên", "nguyện", "chuyển", "nghiệp",
+            "khuyến", "truyền", "chuyên", "thường", "nghiệm", "khoáng", "nguyên", "nguyễn", "nghiêm", "khuynh"
+        ]
+        let pool7 = ["nghiêng"]
+
+        func makeChallenge(word: String, category: String, note: String) -> GlideChallengeWord {
+            let ascii = WordTrie.stripDiacritics(word).lowercased()
+            let path = ascii.map { String($0) }.joined(separator: " - ")
+            return GlideChallengeWord(targetWord: word, hintPath: path, category: category, note: note)
+        }
+
+        var results: [GlideChallengeWord] = []
+
+        // 1. 15 từ 2 ký tự
+        for w in pool2.shuffled().prefix(15) {
+            results.append(makeChallenge(word: w, category: "Từ 2 ký tự", note: "Từ ngẫu nhiên 2 ký tự"))
+        }
+        // 2. 20 từ 3 ký tự
+        for w in pool3.shuffled().prefix(20) {
+            results.append(makeChallenge(word: w, category: "Từ 3 ký tự", note: "Từ ngẫu nhiên 3 ký tự"))
+        }
+        // 3. 25 từ 4 ký tự
+        for w in pool4.shuffled().prefix(25) {
+            results.append(makeChallenge(word: w, category: "Từ 4 ký tự", note: "Từ ngẫu nhiên 4 ký tự"))
+        }
+        // 4. 22 từ 5 ký tự
+        for w in pool5.shuffled().prefix(22) {
+            results.append(makeChallenge(word: w, category: "Từ 5 ký tự", note: "Từ ngẫu nhiên 5 ký tự"))
+        }
+        // 5. 17 từ 6 ký tự
+        for w in pool6.shuffled().prefix(17) {
+            results.append(makeChallenge(word: w, category: "Từ 6 ký tự", note: "Từ ngẫu nhiên 6 ký tự"))
+        }
+        // 6. 1 từ 7 ký tự
+        for w in pool7 {
+            results.append(makeChallenge(word: w, category: "Từ 7 ký tự", note: "Từ ngẫu nhiên 7 ký tự"))
+        }
+
+        return results
+    }
 
     private var recordedSessions: [String: GlideRecordedSession] = [:] // key: targetWord
     private let lock = NSLock()

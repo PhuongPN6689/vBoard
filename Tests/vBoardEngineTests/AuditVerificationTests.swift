@@ -154,7 +154,7 @@ struct AuditVerificationTests {
 
     @Test("Phân tích dữ liệu thực tế từ file người dùng (nếu có)")
     func testUserRealRecording() throws {
-        let path = "/Users/nguyenphuong/Downloads/văn bản-9405FE8B6C11-1.txt"
+        let path = "/Users/nguyenphuong/Downloads/văn bản-AEA9017D3F5D-1.txt"
         guard FileManager.default.fileExists(atPath: path) else { return }
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         struct RecItem: Codable {
@@ -167,7 +167,7 @@ struct AuditVerificationTests {
         }
         let items = try JSONDecoder().decode([RecItem].self, from: data)
         var passCount = 0
-        print("\n================== PHÂN TÍCH FILE MỚI 9405FE8B6C11-1 (\(items.count) TỪ) ==================")
+        print("\n================== PHÂN TÍCH FILE MỚI AEA9017D3F5D-1 (\(items.count) TỪ) ==================")
         for (i, item) in items.enumerated() {
             let target = item.targetWord.lowercased()
             let targetAscii = WordTrie.stripDiacritics(target)

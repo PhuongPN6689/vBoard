@@ -42,6 +42,20 @@ struct EmbeddedKeyboardViewRepresentable: UIViewRepresentable {
 // MARK: - Main Glide Lab & Benchmark View
 
 public struct GlideBenchmarkView: View {
+    public enum BenchmarkWordSet: String, CaseIterable, Identifiable {
+        case standard50 = "Bộ 50 từ chuẩn"
+        case random100 = "Bộ 100 từ ngẫu nhiên"
+
+        public var id: String { rawValue }
+        public var shortTitle: String {
+            switch self {
+            case .standard50: return "50 từ chuẩn"
+            case .random100: return "100 từ ngẫu nhiên"
+            }
+        }
+    }
+
+    @State private var activeSet: BenchmarkWordSet = .standard50
     @State private var words: [GlideChallengeWord] = GlideBenchmarkStore.default50Words
     @State private var currentIndex: Int = 0
     @State private var selectedCategory: String = "Tất cả"
@@ -297,20 +311,43 @@ public struct GlideBenchmarkView: View {
             }
             .background(Color(.systemBackground))
         }
-        .navigationTitle("Phòng thí nghiệm vuốt (50 từ)")
+        .navigationTitle("Phòng thí nghiệm vuốt (\(words.count) từ)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
-                    Button(action: { showWordListSheet = true }) {
-                        Label("Danh sách 50 từ", systemImage: "list.bullet")
+                    Section("Bộ từ kiểm thử") {
+                        Button(action: { switchWordSet(to: .standard50) }) {
+                            HStack {
+                                Text("Bộ 50 từ chuẩn thuần Việt")
+                                if activeSet == .standard50 { Image(systemName: "checkmark") }
+                            }
+                        }
+                        Button(action: { switchWordSet(to: .random100) }) {
+                            HStack {
+                                Text("Bộ 100 từ ngẫu nhiên từ điển")
+                                if activeSet == .random100 { Image(systemName: "checkmark") }
+                            }
+                        }
+                        if activeSet == .random100 {
+                            Button(action: regenerateRandom100) {
+                                Label("Tạo lại 100 từ ngẫu nhiên mới", systemImage: "dice")
+                            }
+                        }
                     }
-                    Button(action: runReevaluation) {
-                        Label("Chạy lại kiểm thử dữ liệu đã lưu", systemImage: "arrow.triangle.2.circlepath")
+
+                    Section("Tiện ích") {
+                        Button(action: { showWordListSheet = true }) {
+                            Label("Danh sách \(words.count) từ", systemImage: "list.bullet")
+                        }
+                        Button(action: runReevaluation) {
+                            Label("Chạy lại kiểm thử dữ liệu đã lưu", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        Button(action: { showExportSheet = true }) {
+                            Label("Xuất / Gửi dữ liệu cho AI", systemImage: "square.and.arrow.up")
+                        }
                     }
-                    Button(action: { showExportSheet = true }) {
-                        Label("Xuất / Gửi dữ liệu cho AI", systemImage: "square.and.arrow.up")
-                    }
+
                     Divider()
                     Button(role: .destructive, action: confirmClearCurrentWord) {
                         Label("Xóa kết quả từ hiện tại", systemImage: "trash")
@@ -355,38 +392,66 @@ public struct GlideBenchmarkView: View {
     // MARK: - UI Components
 
     private var headerStatsSection: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Dữ liệu đã thu thập")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text("\(recordedCount) / \(words.count) từ")
-                    .font(.headline)
-                    .bold()
-                ProgressView(value: Double(recordedCount), total: Double(words.count))
-                    .tint(.blue)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(10)
+        VStack(spacing: 8) {
+            // Thanh chuyển đổi nhanh bộ từ kiểm thử: 50 từ chuẩn vs 100 từ ngẫu nhiên
+            HStack(spacing: 8) {
+                Picker("Bộ từ", selection: $activeSet) {
+                    ForEach(BenchmarkWordSet.allCases) { item in
+                        Text(item.shortTitle).tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: activeSet) { newSet in
+                    switchWordSet(to: newSet)
+                }
 
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("Độ chính xác")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(String(format: "%.1f%%", accuracyPercentage))
-                    .font(.headline)
-                    .bold()
-                    .foregroundStyle(accuracyPercentage >= 80 ? .green : (accuracyPercentage >= 50 ? .orange : .red))
-                Text("PASS: \(passCount) | FAIL: \(recordedCount - passCount)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if activeSet == .random100 {
+                    Button(action: regenerateRandom100) {
+                        Label("Sinh mới", systemImage: "dice.fill")
+                            .font(.caption)
+                            .bold()
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.blue.opacity(0.12))
+                            .foregroundStyle(.blue)
+                            .cornerRadius(8)
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(10)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(10)
+
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dữ liệu đã thu thập")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("\(recordedCount) / \(words.count) từ")
+                        .font(.headline)
+                        .bold()
+                    ProgressView(value: Double(recordedCount), total: Double(words.count))
+                        .tint(.blue)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(10)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Độ chính xác")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(String(format: "%.1f%%", accuracyPercentage))
+                        .font(.headline)
+                        .bold()
+                        .foregroundStyle(accuracyPercentage >= 80 ? .green : (accuracyPercentage >= 50 ? .orange : .red))
+                    Text("PASS: \(passCount) | FAIL: \(recordedCount - passCount)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(10)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(10)
+            }
         }
     }
 
@@ -730,6 +795,27 @@ public struct GlideBenchmarkView: View {
         playbackProgress = 0.0
     }
 
+    private func switchWordSet(to set: BenchmarkWordSet) {
+        activeSet = set
+        currentIndex = 0
+        selectedCategory = "Tất cả"
+        switch set {
+        case .standard50:
+            words = GlideBenchmarkStore.default50Words
+        case .random100:
+            words = GlideBenchmarkStore.generateRandom100Words()
+        }
+        resetPlaybackState()
+    }
+
+    private func regenerateRandom100() {
+        activeSet = .random100
+        currentIndex = 0
+        selectedCategory = "Tất cả"
+        words = GlideBenchmarkStore.generateRandom100Words()
+        resetPlaybackState()
+    }
+
     private func loadSavedSessions() {
         sessions = store.getAllSessions()
     }
@@ -805,7 +891,7 @@ struct GlideWordListSheetView: View {
                     }
                 }
             }
-            .navigationTitle("Danh sách 50 từ")
+            .navigationTitle("Danh sách \(words.count) từ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -921,7 +1007,7 @@ struct GlideDataExportSheetView: View {
     }
 
     var reportSummaryString: String {
-        var str = "=== BÁO CÁO THU THẬP DỮ LIỆU VUỐT PHÍM 50 TỪ ===\n"
+        var str = "=== BÁO CÁO THU THẬP DỮ LIỆU VUỐT PHÍM (\(words.count) TỪ) ===\n"
         str += "Thời gian: \(Date())\n"
         str += "Tiêu chí chấm: \(matchUnaccented ? "Bỏ dấu thanh" : "Chính xác cả dấu")\n"
         str += "Tổng số từ đã thu thập: \(sessions.count) / \(words.count)\n"

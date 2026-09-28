@@ -902,9 +902,16 @@ public final class WordTrie: @unchecked Sendable {
                     let isExactTwoChar = (entry.length == 2 && startMatch && endMatch)
                     let isNearTwoChar = (entry.length == 2 && startNear && endNear && (startMatch || endMatch))
                     let exactTwoCharBonus = isExactTwoChar ? 20.0 : (isNearTwoChar ? 12.0 : 0.0)
+                    // Thưởng từ khớp hoàn hảo 100% toàn bộ chuỗi ký tự mà người dùng vuốt (không thừa ký tự nào, không fuzzy)
+                    // (đảm bảo 'vui' vuốt đủ v-u-i không bao giờ bị 'vì' vuốt tắt lấn át điểm)
+                    let isPerfectMatch = (entry.length == lowerSeq.count && fuzzyPenalty == 0.0)
+                    let perfectMatchBonus = isPerfectMatch ? 30.0 : 0.0
 
                     // Điểm xác suất ngôn ngữ + tần suất thực tế + độ phủ cử chỉ + thưởng độ dài từ - phạt ký tự thừa & phím ngoặt
-                    var score = logFreq * 30.0 + freqBonus + coverage * 80.0 + matchLengthBonus + coreWordBonus + exactTwoCharBonus - excessChars * excessPenaltyFactor - detourMissPenalty - fuzzyPenalty + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+                    var score: Double = (logFreq * 30.0) + freqBonus + (coverage * 80.0)
+                    score += matchLengthBonus + coreWordBonus + exactTwoCharBonus + perfectMatchBonus
+                    score -= (excessChars * excessPenaltyFactor) + detourMissPenalty + fuzzyPenalty
+                    score += UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
                     if isInterpolatedTransit {
                         score -= 20.0
                     }
