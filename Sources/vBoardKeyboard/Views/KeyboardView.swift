@@ -80,6 +80,36 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     public var spaceCursorHandler: SpaceCursorHandler?
     public var backspaceSwipeHandler: BackspaceSwipeHandler?
 
+    /// Tùy biến khoảng đệm mép dưới bàn phím (nếu có)
+    public var customBottomPadding: CGFloat? = nil
+
+    /// Khoảng đệm an toàn mép dưới thực tế (tương ứng với vị trí phím Home Indicator trên iPhone thật)
+    public var effectiveBottomPadding: CGFloat {
+        if let custom = customBottomPadding {
+            return custom
+        }
+        let bottomSafe = max(safeAreaInsets.bottom, 0)
+        if bottomSafe > 0 {
+            return max(bottomSafe - 6.0, 4.0)
+        }
+        #if canImport(UIKit)
+        if let window = self.window, window.safeAreaInsets.bottom > 0 {
+            return max(window.safeAreaInsets.bottom - 6.0, 4.0)
+        }
+        for scene in UIApplication.shared.connectedScenes {
+            if let windowScene = scene as? UIWindowScene {
+                for window in windowScene.windows where window.isKeyWindow {
+                    if window.safeAreaInsets.bottom > 0 {
+                        return max(window.safeAreaInsets.bottom - 6.0, 4.0)
+                    }
+                }
+            }
+        }
+        #endif
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        return isPad ? 14.0 : 28.0
+    }
+
     public override init(frame: CGRect) {
         super.init(frame: frame)
         setupLayers()
@@ -947,8 +977,9 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         glideTrailLayer.frame = bounds
 
-        let bottomSafeInset = max(safeAreaInsets.bottom, 0)
-        let bottomPadding: CGFloat = bottomSafeInset > 0 ? max(bottomSafeInset - 6.0, 4.0) : 4.0
+        let baseBottom = effectiveBottomPadding
+        let bottomOffset = CGFloat(vBoardSettings.shared.keyboardBottomOffset)
+        let bottomPadding: CGFloat = max(4.0, baseBottom + bottomOffset)
         let sideMargin: CGFloat = 3.0
         let keySpacing: CGFloat = 5.0
         let rowSpacing: CGFloat = 5.0

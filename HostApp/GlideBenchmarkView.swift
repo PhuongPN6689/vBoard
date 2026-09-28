@@ -6,6 +6,8 @@ import vBoardKeyboard
 
 struct EmbeddedKeyboardViewRepresentable: UIViewRepresentable {
     let keyboardView: KeyboardView
+    let height: CGFloat
+    let bottomPadding: CGFloat
 
     func makeUIView(context: Context) -> UIView {
         // Kích hoạt tính năng vuốt để nhập trong phiên thử nghiệm
@@ -15,6 +17,7 @@ struct EmbeddedKeyboardViewRepresentable: UIViewRepresentable {
         let container = UIView()
         container.backgroundColor = .clear
 
+        keyboardView.customBottomPadding = bottomPadding
         keyboardView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(keyboardView)
 
@@ -29,7 +32,10 @@ struct EmbeddedKeyboardViewRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+        keyboardView.customBottomPadding = bottomPadding
+        keyboardView.refreshLayout()
         keyboardView.setNeedsLayout()
+        keyboardView.layoutIfNeeded()
     }
 }
 
@@ -42,12 +48,37 @@ public struct GlideBenchmarkView: View {
     @State private var matchUnaccentedOnly: Bool = true
     @State private var autoAdvance: Bool = false
 
+    // Cấu hình Bàn phím động đồng bộ 100% với bàn phím thật
+    @State private var heightScale: KeyboardHeightScale = vBoardSettings.shared.keyboardHeightScale
+    @State private var isNumberRow: Bool = vBoardSettings.shared.isNumberRowEnabled
+    @State private var bottomOffset: Double = vBoardSettings.shared.keyboardBottomOffset
+
     // Quản lý phiên dữ liệu
     @State private var store = GlideBenchmarkStore.shared
     @State private var sessions: [String: GlideRecordedSession] = [:]
 
     // Keyboard View dùng chung cho cả tương tác trực tiếp & phát lại
-    @State private var keyboardView = KeyboardView(frame: CGRect(x: 0, y: 0, width: 390, height: 260))
+    @State private var keyboardView = KeyboardView(frame: .zero)
+
+    private var isPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+
+    /// Khoảng đệm an toàn mép dưới thực tế (tương ứng với Home Indicator trên iPhone thật)
+    private var effectiveBottomPadding: CGFloat {
+        let base: CGFloat = isPad ? 14.0 : 28.0
+        return max(4.0, base + CGFloat(bottomOffset))
+    }
+
+    /// Chiều cao chuẩn của bàn phím tính theo đúng cấu hình bàn phím thật
+    private var currentKeyboardHeight: CGFloat {
+        vBoardSettings.shared.calculateKeyboardHeight(
+            isPad: isPad,
+            isNumberRow: isNumberRow,
+            isSuggestionBar: vBoardSettings.shared.isSuggestionBarEnabled,
+            customBottomPadding: isPad ? 14.0 : 28.0
+        )
+    }
 
     // Trạng thái Playback
     @State private var isPlaying: Bool = false
@@ -143,18 +174,93 @@ public struct GlideBenchmarkView: View {
 
             // Phần dưới: CỐ ĐỊNH Ở ĐÁY MÀN HÌNH, TOÀN BỘ CHIỀU NGANG
             VStack(spacing: 0) {
-                // Thanh điều khiển bàn phím nhanh
+                // Thanh điều khiển bàn phím nhanh & đồng bộ kích thước thật
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {
-                        Image(systemName: "hand.draw.fill")
+                        Image(systemName: "keyboard.fill")
                             .foregroundStyle(.blue)
-                        Text("Bàn phím vuốt (Cố định ở đáy)")
+                        Text("Bàn phím thật (\(heightScale.displayName))")
                             .font(.caption2)
                             .bold()
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
+
+                    // Menu chỉnh nhanh Size & Nâng mép dưới bàn phím ngay tại phòng thí nghiệm
+                    Menu {
+                        Section("Kích thước chiều cao (Config)") {
+                            ForEach(KeyboardHeightScale.allCases) { item in
+                                Button(action: {
+                                    heightScale = item
+                                    vBoardSettings.shared.keyboardHeightScale = item
+                                    vBoardSettings.shared.notifySettingsChanged()
+                                    syncSettingsWithKeyboard()
+                                }) {
+                                    HStack {
+                                        Text(item.displayName)
+                                        if heightScale == item {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Section("Độ nâng mép dưới (Bottom Offset)") {
+                            Button("Tiêu chuẩn theo máy (0 pt)") {
+                                bottomOffset = 0
+                                vBoardSettings.shared.keyboardBottomOffset = 0
+                                vBoardSettings.shared.notifySettingsChanged()
+                                syncSettingsWithKeyboard()
+                            }
+                            Button("Nâng nhẹ (+8 pt)") {
+                                bottomOffset = 8
+                                vBoardSettings.shared.keyboardBottomOffset = 8
+                                vBoardSettings.shared.notifySettingsChanged()
+                                syncSettingsWithKeyboard()
+                            }
+                            Button("Nâng vừa (+16 pt)") {
+                                bottomOffset = 16
+                                vBoardSettings.shared.keyboardBottomOffset = 16
+                                vBoardSettings.shared.notifySettingsChanged()
+                                syncSettingsWithKeyboard()
+                            }
+                            Button("Nâng cao (+24 pt)") {
+                                bottomOffset = 24
+                                vBoardSettings.shared.keyboardBottomOffset = 24
+                                vBoardSettings.shared.notifySettingsChanged()
+                                syncSettingsWithKeyboard()
+                            }
+                        }
+
+                        Section("Hàng phím số trên cùng") {
+                            Button(action: {
+                                isNumberRow.toggle()
+                                vBoardSettings.shared.isNumberRowEnabled = isNumberRow
+                                vBoardSettings.shared.notifySettingsChanged()
+                                syncSettingsWithKeyboard()
+                            }) {
+                                HStack {
+                                    Text("Hàng số trên cùng")
+                                    if isNumberRow {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "slider.horizontal.3")
+                            Text("Chỉnh size / vị trí")
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.blue.opacity(0.12))
+                        .foregroundStyle(.blue)
+                        .cornerRadius(6)
+                    }
 
                     // Nút bật/tắt tự chuyển từ
                     Button(action: { autoAdvance.toggle() }) {
@@ -180,10 +286,14 @@ public struct GlideBenchmarkView: View {
                 .padding(.vertical, 5)
                 .background(Color(.secondarySystemBackground))
 
-                // Bàn phím nhúng full width tràn 2 bên
-                EmbeddedKeyboardViewRepresentable(keyboardView: keyboardView)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 260)
+                // Bàn phím nhúng full width tràn 2 bên, tự động nâng lên đúng độ cao config
+                EmbeddedKeyboardViewRepresentable(
+                    keyboardView: keyboardView,
+                    height: currentKeyboardHeight,
+                    bottomPadding: effectiveBottomPadding
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: currentKeyboardHeight)
             }
             .background(Color(.systemBackground))
         }
@@ -214,6 +324,7 @@ public struct GlideBenchmarkView: View {
             }
         }
         .onAppear {
+            syncSettingsWithKeyboard()
             setupKeyboardCallback()
             loadSavedSessions()
         }
@@ -503,6 +614,18 @@ public struct GlideBenchmarkView: View {
     }
 
     // MARK: - Logic & Actions
+
+    private func syncSettingsWithKeyboard() {
+        heightScale = vBoardSettings.shared.keyboardHeightScale
+        isNumberRow = vBoardSettings.shared.isNumberRowEnabled
+        bottomOffset = vBoardSettings.shared.keyboardBottomOffset
+
+        keyboardView.isNumberRowActive = isNumberRow
+        keyboardView.customBottomPadding = effectiveBottomPadding
+        keyboardView.refreshLayout()
+        keyboardView.setNeedsLayout()
+        keyboardView.layoutIfNeeded()
+    }
 
     private func setupKeyboardCallback() {
         keyboardView.onGlideSessionFinished = { samples, primarySeq, fullSeq, matches, stats in

@@ -181,6 +181,12 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             calculatedHeight += 42.0
         }
 
+        // Bổ sung khoảng đệm an toàn mép dưới (Home Indicator) và độ nâng tùy chỉnh
+        let bottomSafeInset = view.safeAreaInsets.bottom
+        let baseBottomPadding: CGFloat = bottomSafeInset > 0 ? max(bottomSafeInset - 6.0, 4.0) : (isPad ? 14.0 : 28.0)
+        let totalBottomPadding = max(4.0, baseBottomPadding + CGFloat(settings.keyboardBottomOffset))
+        calculatedHeight += totalBottomPadding
+
         if heightConstraint == nil {
             heightConstraint = view.heightAnchor.constraint(equalToConstant: calculatedHeight)
             heightConstraint?.priority = UILayoutPriority(999)
@@ -234,6 +240,34 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             }
         }
         updateWordSuggestions()
+    }
+
+    open override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // Đồng bộ lại heightConstraint khi safeAreaInsets.bottom được hệ thống cập nhật
+        let settings = vBoardSettings.shared
+        let isPad = traitCollection.userInterfaceIdiom == .pad
+        let isSecure = textDocumentProxy.isSecureTextEntry ?? false
+        let isPassword = (textDocumentProxy.textContentType == .password || textDocumentProxy.textContentType == .newPassword)
+        let isNumberRowActive = settings.isNumberRowEnabled || (settings.isNumberRowForPasswordEnabled && (isSecure || isPassword))
+        let bottomSafeInset = view.safeAreaInsets.bottom
+        let baseBottomPadding: CGFloat = bottomSafeInset > 0 ? max(bottomSafeInset - 6.0, 4.0) : (isPad ? 14.0 : 28.0)
+        let totalBottomPadding = max(4.0, baseBottomPadding + CGFloat(settings.keyboardBottomOffset))
+
+        let scale = settings.keyboardHeightScale
+        let baseHeight: CGFloat = isPad ? scale.padHeight : scale.phoneHeight
+        var newHeight: CGFloat = baseHeight
+        if isNumberRowActive && !keyboardView.isNumberPadActive {
+            newHeight += 28.0
+        }
+        if settings.isSuggestionBarEnabled && !keyboardView.isNumberPadActive {
+            newHeight += 42.0
+        }
+        newHeight += totalBottomPadding
+
+        if heightConstraint?.constant != newHeight {
+            heightConstraint?.constant = newHeight
+        }
     }
 
     open override func viewDidAppear(_ animated: Bool) {

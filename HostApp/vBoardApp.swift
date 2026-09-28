@@ -272,6 +272,7 @@ struct KeysLayoutSettingsView: View {
     @Binding var currentOneHanded: OneHandedMode
 
     @State private var scale: KeyboardHeightScale = vBoardSettings.shared.keyboardHeightScale
+    @State private var bottomOffset: Double = vBoardSettings.shared.keyboardBottomOffset
     @State private var oneHanded: OneHandedMode = vBoardSettings.shared.oneHandedMode
     @State private var isNumberRow: Bool = vBoardSettings.shared.isNumberRowEnabled
     @State private var isNumberRowPassword: Bool = vBoardSettings.shared.isNumberRowForPasswordEnabled
@@ -293,6 +294,23 @@ struct KeysLayoutSettingsView: View {
                 .onChange(of: scale) { newValue in
                     vBoardSettings.shared.keyboardHeightScale = newValue
                     currentScale = newValue
+                    vBoardSettings.shared.notifySettingsChanged()
+                }
+            }
+
+            Section(
+                header: Text("Độ nâng mép dưới bàn phím"),
+                footer: Text("Nâng hàng phím dưới cùng (phím cách, phím chức năng) lên cao hơn mép đáy màn hình để ngón cái không bị mỏi khi gõ.")
+            ) {
+                Picker("Nâng mép dưới", selection: $bottomOffset) {
+                    Text("Tiêu chuẩn theo máy (0 pt)").tag(0.0)
+                    Text("Nâng nhẹ (+8 pt)").tag(8.0)
+                    Text("Nâng vừa (+16 pt)").tag(16.0)
+                    Text("Nâng cao (+24 pt)").tag(24.0)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: bottomOffset) { newValue in
+                    vBoardSettings.shared.keyboardBottomOffset = newValue
                     vBoardSettings.shared.notifySettingsChanged()
                 }
             }

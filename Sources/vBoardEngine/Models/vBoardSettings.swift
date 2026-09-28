@@ -221,6 +221,7 @@ public final class vBoardSettings: @unchecked Sendable {
         static let isAutoUndoEnabled = "vboard_auto_undo"
 
         static let keyboardHeightScale = "vboard_height_scale"
+        static let keyboardBottomOffset = "vboard_bottom_offset"
         static let isGlobeKeyHidden = "vboard_hide_globe_key"
         static let isNumberRowEnabled = "vboard_number_row"
         static let isHintSymbolsEnabled = "vboard_hint_symbols"
@@ -475,6 +476,43 @@ public final class vBoardSettings: @unchecked Sendable {
         set {
             defaults.set(newValue.rawValue, forKey: Keys.keyboardHeightScale)
         }
+    }
+
+    /// Độ nâng mép dưới bàn phím (khoảng cách bổ sung so với mép đáy màn hình, đơn vị pt)
+    public var keyboardBottomOffset: Double {
+        get {
+            defaults.double(forKey: Keys.keyboardBottomOffset)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.keyboardBottomOffset)
+        }
+    }
+
+    /// Tính toán tổng chiều cao chuẩn của bàn phím theo cấu hình hiện tại
+    public func calculateKeyboardHeight(
+        isPad: Bool,
+        isNumberRow: Bool? = nil,
+        isSuggestionBar: Bool? = nil,
+        customBottomPadding: CGFloat? = nil
+    ) -> CGFloat {
+        let scale = keyboardHeightScale
+        let baseHeight: CGFloat = isPad ? scale.padHeight : scale.phoneHeight
+
+        var total = baseHeight
+        let hasNumberRow = isNumberRow ?? isNumberRowEnabled
+        if hasNumberRow {
+            total += 28.0
+        }
+        let hasSuggestionBar = isSuggestionBar ?? isSuggestionBarEnabled
+        if hasSuggestionBar {
+            total += 42.0
+        }
+
+        let baseBottomPadding: CGFloat = customBottomPadding ?? (isPad ? 14.0 : 28.0)
+        let totalBottomPadding = max(4.0, baseBottomPadding + CGFloat(keyboardBottomOffset))
+        total += totalBottomPadding
+
+        return total
     }
 
     /// Phím chuyển đổi bàn phím hệ thống (Globe) luôn được hiển thị để tuân thủ Apple HIG Guideline 4.4.1
