@@ -154,7 +154,7 @@ struct AuditVerificationTests {
 
     @Test("Phân tích dữ liệu thực tế từ file người dùng (nếu có)")
     func testUserRealRecording() throws {
-        let path = "/Users/nguyenphuong/Downloads/văn bản-FB74BF2A4F88-1.txt"
+        let path = "/Users/nguyenphuong/Downloads/văn bản-9405FE8B6C11-1.txt"
         guard FileManager.default.fileExists(atPath: path) else { return }
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         struct RecItem: Codable {
@@ -167,7 +167,7 @@ struct AuditVerificationTests {
         }
         let items = try JSONDecoder().decode([RecItem].self, from: data)
         var passCount = 0
-        print("\n================== PHÂN TÍCH FILE MỚI FB74BF2A4F88-1 (50 TỪ) ==================")
+        print("\n================== PHÂN TÍCH FILE MỚI 9405FE8B6C11-1 (\(items.count) TỪ) ==================")
         for (i, item) in items.enumerated() {
             let target = item.targetWord.lowercased()
             let targetAscii = WordTrie.stripDiacritics(target)
@@ -185,7 +185,8 @@ struct AuditVerificationTests {
                 print("     ↳ Trong file ghi nhận: '\(item.recognizedWord)' (Match: \(item.isMatch))")
             }
         }
-        print("TỔNG KẾT FILE MỚI: \(passCount)/\(items.count) ĐẠT (\(Double(passCount)*100.0/Double(items.count))%)")
-        #expect(passCount >= 50, "Tỷ lệ nhận diện từ file thực tế phải đạt ít nhất 50/59 mẫu (hiện tại: \(passCount)/\(items.count))")
+        let pct = Double(passCount) * 100.0 / Double(items.count)
+        print("TỔNG KẾT FILE MỚI: \(passCount)/\(items.count) ĐẠT (\(String(format: "%.1f", pct))%)")
+        #expect(pct >= 90.0, "Tỷ lệ nhận diện từ file thực tế phải đạt ít nhất 90% (hiện tại: \(passCount)/\(items.count) = \(pct)%)")
     }
 }

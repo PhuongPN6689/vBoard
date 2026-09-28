@@ -721,12 +721,15 @@ public final class WordTrie: @unchecked Sendable {
                 // Kiểm tra xem entry.asciiChars có phải là dãy con (subsequence) của lowerSeq không.
                 // Hỗ trợ:
                 // 1. Phụ âm/nguyên âm đôi lướt qua 1 lần (ví dụ 'comment').
-                // 2. Tối đa 1 ký tự fuzzy lân cận nếu ngón tay rẽ không tới hẳn phím đó
-                //    (ví dụ 'chào' vuốt tới 's' kề 'a', hoặc 'karaoke' nhấc tay ở 'r' kề 'e').
+                // 2. Ký tự fuzzy lân cận nếu ngón tay rẽ không tới hẳn phím đó
+                //    (tối đa 1 cho từ ngắn < 6 ký tự, tối đa 2 cho từ dài >= 6 ký tự).
+                // 3. Phục hồi trôi phím khi nhấc tay kết thúc (terminal landing drift) ở ký tự cuối.
                 var sIdx = 0
                 var matched = 0
                 var matchedIndices: [Int] = []
                 var fuzzyPenalty: Double = 0.0
+                var fuzzyCount = 0
+                let maxFuzzy = entry.length >= 6 ? 2 : 1
 
                 for (cIdx, ch) in entry.asciiChars.enumerated() {
                     var foundIdx = -1
@@ -744,7 +747,12 @@ public final class WordTrie: @unchecked Sendable {
                         sIdx = foundIdx + 1
                     } else if cIdx > 0 && ch == entry.asciiChars[cIdx - 1] {
                         matched += 1
-                    } else if fuzzyPenalty == 0.0 {
+                    } else if cIdx == entry.asciiChars.count - 1 && sIdx < lowerSeq.count && Self.qwertyKeyDistance(ch, lowerSeq[lowerSeq.count - 1]) <= 1.25 {
+                        // Ký tự cuối cùng của từ khớp với phím nhấc tay lệch lân cận (terminal landing drift)
+                        matched += 1
+                        matchedIndices.append(lowerSeq.count - 1)
+                        sIdx = lowerSeq.count
+                    } else if fuzzyCount < maxFuzzy {
                         // Tìm ký tự lân cận gần nhất trong phần còn lại của quỹ đạo
                         var bestNeighborIdx = -1
                         var bestDist = 1.2
@@ -762,7 +770,8 @@ public final class WordTrie: @unchecked Sendable {
                             matched += 1
                             matchedIndices.append(bestNeighborIdx)
                             sIdx = bestNeighborIdx + 1
-                            fuzzyPenalty = 22.0
+                            fuzzyPenalty += 20.0
+                            fuzzyCount += 1
                         } else {
                             break
                         }
@@ -884,8 +893,18 @@ public final class WordTrie: @unchecked Sendable {
                     let excessPenaltyFactor = (entry.length == 2 && entry.frequency >= 250) ? 2.5 : 5.0
                     let coreWordBonus = (entry.frequency >= 250) ? 25.0 : 0.0
 
+                    // Ưu tiên từ 2 chữ khi người dùng chạm đúng (hoặc gần đúng) phím đầu và nhấc đúng (hoặc gần đúng) phím cuối
+                    // (tránh bị các từ 3 chữ có phím giữa nằm trên đường thẳng đè điểm như 'có' vs 'cho')
+                    let startMatch = (entry.asciiChars.first == targetFirst)
+                    let endMatch = (entry.asciiChars.last == targetLast)
+                    let startNear = (entry.asciiChars.first != nil && Self.qwertyKeyDistance(entry.asciiChars.first!, targetFirst) <= 1.15)
+                    let endNear = (entry.asciiChars.last != nil && Self.qwertyKeyDistance(entry.asciiChars.last!, targetLast) <= 1.15)
+                    let isExactTwoChar = (entry.length == 2 && startMatch && endMatch)
+                    let isNearTwoChar = (entry.length == 2 && startNear && endNear && (startMatch || endMatch))
+                    let exactTwoCharBonus = isExactTwoChar ? 20.0 : (isNearTwoChar ? 12.0 : 0.0)
+
                     // Điểm xác suất ngôn ngữ + tần suất thực tế + độ phủ cử chỉ + thưởng độ dài từ - phạt ký tự thừa & phím ngoặt
-                    var score = logFreq * 30.0 + freqBonus + coverage * 80.0 + matchLengthBonus + coreWordBonus - excessChars * excessPenaltyFactor - detourMissPenalty - fuzzyPenalty + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
+                    var score = logFreq * 30.0 + freqBonus + coverage * 80.0 + matchLengthBonus + coreWordBonus + exactTwoCharBonus - excessChars * excessPenaltyFactor - detourMissPenalty - fuzzyPenalty + UserAdaptiveLearningStore.shared.userBoost(for: entry.word)
                     if isInterpolatedTransit {
                         score -= 20.0
                     }
