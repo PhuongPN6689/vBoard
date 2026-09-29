@@ -67,7 +67,8 @@ public struct GlideBenchmarkView: View {
     // Cấu hình Bàn phím động đồng bộ 100% với bàn phím thật
     @State private var heightScale: KeyboardHeightScale = vBoardSettings.shared.keyboardHeightScale
     @State private var isNumberRow: Bool = vBoardSettings.shared.isNumberRowEnabled
-    @State private var bottomOffset: Double = vBoardSettings.shared.keyboardBottomOffset
+    /// Độ nâng mép dưới chỉ áp dụng riêng cho phòng thí nghiệm (không làm lệch bàn phím thật bên ngoài)
+    @State private var labBottomOffset: Double = 0.0
 
     // Quản lý phiên dữ liệu
     @State private var store = GlideBenchmarkStore.shared
@@ -80,10 +81,10 @@ public struct GlideBenchmarkView: View {
         UIDevice.current.userInterfaceIdiom == .pad
     }
 
-    /// Khoảng đệm an toàn mép dưới thực tế (tương ứng với Home Indicator trên iPhone thật)
+    /// Khoảng đệm an toàn mép dưới thực tế trong phòng thí nghiệm (tương ứng với Home Indicator trên iPhone thật)
     private var effectiveBottomPadding: CGFloat {
         let base: CGFloat = isPad ? 14.0 : 28.0
-        return max(4.0, base + CGFloat(bottomOffset))
+        return max(4.0, base + CGFloat(labBottomOffset))
     }
 
     /// Chiều cao chuẩn của bàn phím tính theo đúng cấu hình bàn phím thật
@@ -92,7 +93,7 @@ public struct GlideBenchmarkView: View {
             isPad: isPad,
             isNumberRow: isNumberRow,
             isSuggestionBar: vBoardSettings.shared.isSuggestionBarEnabled,
-            customBottomPadding: isPad ? 14.0 : 28.0
+            customBottomPadding: effectiveBottomPadding
         )
     }
 
@@ -109,6 +110,8 @@ public struct GlideBenchmarkView: View {
     @State private var reevalResults: [GlideReevaluationResult] = []
     @State private var alertMessage: String = ""
     @State private var showAlert: Bool = false
+    @State private var showJumpAlert: Bool = false
+    @State private var jumpTargetText: String = ""
 
     private let categories = [
         "Tất cả",
@@ -280,30 +283,26 @@ public struct GlideBenchmarkView: View {
                             }
                         }
 
-                        Section("Độ nâng mép dưới (Bottom Offset)") {
-                            Button("Tiêu chuẩn theo máy (0 pt)") {
-                                bottomOffset = 0
-                                vBoardSettings.shared.keyboardBottomOffset = 0
-                                vBoardSettings.shared.notifySettingsChanged()
-                                syncSettingsWithKeyboard()
+                        Section("Độ nâng mép dưới phòng thí nghiệm") {
+                            Button("Mặc định phòng lab (0 pt)") {
+                                labBottomOffset = 0
+                                keyboardView.customBottomPadding = effectiveBottomPadding
+                                keyboardView.refreshLayout()
                             }
                             Button("Nâng nhẹ (+8 pt)") {
-                                bottomOffset = 8
-                                vBoardSettings.shared.keyboardBottomOffset = 8
-                                vBoardSettings.shared.notifySettingsChanged()
-                                syncSettingsWithKeyboard()
+                                labBottomOffset = 8
+                                keyboardView.customBottomPadding = effectiveBottomPadding
+                                keyboardView.refreshLayout()
                             }
                             Button("Nâng vừa (+16 pt)") {
-                                bottomOffset = 16
-                                vBoardSettings.shared.keyboardBottomOffset = 16
-                                vBoardSettings.shared.notifySettingsChanged()
-                                syncSettingsWithKeyboard()
+                                labBottomOffset = 16
+                                keyboardView.customBottomPadding = effectiveBottomPadding
+                                keyboardView.refreshLayout()
                             }
                             Button("Nâng cao (+24 pt)") {
-                                bottomOffset = 24
-                                vBoardSettings.shared.keyboardBottomOffset = 24
-                                vBoardSettings.shared.notifySettingsChanged()
-                                syncSettingsWithKeyboard()
+                                labBottomOffset = 24
+                                keyboardView.customBottomPadding = effectiveBottomPadding
+                                keyboardView.refreshLayout()
                             }
                         }
 
@@ -429,6 +428,10 @@ public struct GlideBenchmarkView: View {
             syncSettingsWithKeyboard()
             setupKeyboardCallback()
             loadSavedSessions()
+            restoreSavedIndex(for: activeSet)
+        }
+        .onChange(of: currentIndex) { _ in
+            saveCurrentIndex()
         }
         .sheet(isPresented: $showExportSheet) {
             GlideDataExportSheetView(
@@ -458,6 +461,19 @@ public struct GlideBenchmarkView: View {
         }
         .alert(isPresented: $showAlert) {
             Alert(title: Text("Thông báo"), message: Text(alertMessage), dismissButton: .default(Text("Đóng")))
+        }
+        .alert("Nhảy tới từ số", isPresented: $showJumpAlert) {
+            TextField("Số thứ tự (1 - \(filteredWords.count))", text: $jumpTargetText)
+                .keyboardType(.numberPad)
+            Button("Đi tới") {
+                if let num = Int(jumpTargetText.trimmingCharacters(in: .whitespacesAndNewlines)),
+                   num >= 1 && num <= filteredWords.count {
+                    jumpToWordIndex(num - 1)
+                }
+            }
+            Button("Hủy", role: .cancel) { }
+        } message: {
+            Text("Nhập số thứ tự từ 1 đến \(filteredWords.count) để di chuyển nhanh.")
         }
     }
 
@@ -636,9 +652,25 @@ public struct GlideBenchmarkView: View {
                         .cornerRadius(6)
                 }
 
-                Text("#\(currentIndex + 1)/\(filteredWords.count)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Button(action: {
+                    jumpTargetText = "\(currentIndex + 1)"
+                    showJumpAlert = true
+                }) {
+                    HStack(spacing: 3) {
+                        Text("#\(currentIndex + 1)/\(filteredWords.count)")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundStyle(.blue)
+                        Image(systemName: "pencil")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.blue)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
             }
 
             Text(currentWord.targetWord)
@@ -782,29 +814,115 @@ public struct GlideBenchmarkView: View {
     }
 
     private var navigationButtons: some View {
-        HStack(spacing: 12) {
-            Button(action: prevWord) {
-                Label("Từ trước", systemImage: "chevron.left")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .disabled(currentIndex == 0)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Button(action: prevWord) {
+                    Label("Từ trước", systemImage: "chevron.left")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(currentIndex == 0)
 
-            Button(action: nextWord) {
-                Label("Từ kế tiếp", systemImage: "chevron.right")
-                    .frame(maxWidth: .infinity)
+                Button(action: {
+                    jumpTargetText = "\(currentIndex + 1)"
+                    showJumpAlert = true
+                }) {
+                    Label("Nhảy số", systemImage: "number")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button(action: nextWord) {
+                    Label("Từ sau", systemImage: "chevron.right")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(currentIndex >= filteredWords.count - 1)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(currentIndex >= filteredWords.count - 1)
+
+            HStack(spacing: 8) {
+                Button(action: jumpToNextUnrecorded) {
+                    Label("Chưa thử", systemImage: "forward.frame")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button(action: jumpToNextFailed) {
+                    Label("Lỗi (ngoài Top 3)", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
+            }
         }
     }
 
     // MARK: - Logic & Actions
 
+    private func savedIndexKey(for set: BenchmarkWordSet) -> String {
+        "vBoard_benchmark_currentIndex_\(set.rawValue)"
+    }
+
+    private func saveCurrentIndex() {
+        UserDefaults.standard.set(currentIndex, forKey: savedIndexKey(for: activeSet))
+    }
+
+    private func restoreSavedIndex(for set: BenchmarkWordSet) {
+        let saved = UserDefaults.standard.integer(forKey: savedIndexKey(for: set))
+        if saved >= 0 && saved < words.count {
+            currentIndex = saved
+        } else {
+            currentIndex = 0
+        }
+    }
+
+    private func jumpToWordIndex(_ newIndex: Int) {
+        guard newIndex >= 0 && newIndex < filteredWords.count else { return }
+        currentIndex = newIndex
+        saveCurrentIndex()
+        resetPlaybackState()
+    }
+
+    /// Nhảy đến từ tiếp theo chưa được thu thập
+    private func jumpToNextUnrecorded() {
+        guard !filteredWords.isEmpty else { return }
+        let total = filteredWords.count
+        for step in 1..<total {
+            let idx = (currentIndex + step) % total
+            let w = filteredWords[idx]
+            if sessions[w.targetWord.lowercased()] == nil {
+                jumpToWordIndex(idx)
+                return
+            }
+        }
+        alertMessage = "Tất cả các từ trong danh sách hiện tại đã được thu thập dữ liệu!"
+        showAlert = true
+    }
+
+    /// Nhảy đến từ tiếp theo bị lỗi (kết quả nằm ngoài Top 3 gợi ý hoặc chưa khớp)
+    private func jumpToNextFailed() {
+        guard !filteredWords.isEmpty else { return }
+        let total = filteredWords.count
+        for step in 1..<total {
+            let idx = (currentIndex + step) % total
+            let w = filteredWords[idx]
+            if let sess = sessions[w.targetWord.lowercased()] {
+                let rank = sess.targetRank(matchUnaccented: matchUnaccentedOnly)
+                if rank == 0 {
+                    jumpToWordIndex(idx)
+                    return
+                }
+            }
+        }
+        alertMessage = "Không có từ nào bị lỗi (ngoài Top 3) trong danh sách!"
+        showAlert = true
+    }
+
     private func syncSettingsWithKeyboard() {
         heightScale = vBoardSettings.shared.keyboardHeightScale
         isNumberRow = vBoardSettings.shared.isNumberRowEnabled
-        bottomOffset = vBoardSettings.shared.keyboardBottomOffset
 
         keyboardView.isNumberRowActive = isNumberRow
         keyboardView.customBottomPadding = effectiveBottomPadding
@@ -899,6 +1017,7 @@ public struct GlideBenchmarkView: View {
     private func nextWord() {
         if currentIndex < filteredWords.count - 1 {
             currentIndex += 1
+            saveCurrentIndex()
             resetPlaybackState()
         }
     }
@@ -906,6 +1025,7 @@ public struct GlideBenchmarkView: View {
     private func prevWord() {
         if currentIndex > 0 {
             currentIndex -= 1
+            saveCurrentIndex()
             resetPlaybackState()
         }
     }
@@ -918,7 +1038,6 @@ public struct GlideBenchmarkView: View {
 
     private func switchWordSet(to set: BenchmarkWordSet) {
         activeSet = set
-        currentIndex = 0
         selectedCategory = "Tất cả"
         switch set {
         case .standard50:
@@ -928,14 +1047,16 @@ public struct GlideBenchmarkView: View {
         case .top1000:
             words = GlideBenchmarkStore.getTop1000Words()
         }
+        restoreSavedIndex(for: set)
         resetPlaybackState()
     }
 
     private func regenerateRandom100() {
         activeSet = .random100
-        currentIndex = 0
         selectedCategory = "Tất cả"
         words = GlideBenchmarkStore.generateRandom100Words()
+        currentIndex = 0
+        saveCurrentIndex()
         resetPlaybackState()
     }
 
@@ -966,6 +1087,15 @@ public struct GlideBenchmarkView: View {
 
 // MARK: - Word List Sheet View
 
+enum WordListFilter: String, CaseIterable, Identifiable {
+    case all = "Tất cả"
+    case unrecorded = "Chưa thử"
+    case failed = "Lỗi (ngoài Top 3)"
+    case passed = "Đạt (Top 1-3)"
+
+    var id: String { rawValue }
+}
+
 struct GlideWordListSheetView: View {
     let words: [GlideChallengeWord]
     let sessions: [String: GlideRecordedSession]
@@ -973,49 +1103,125 @@ struct GlideWordListSheetView: View {
     @Binding var selectedCategory: String
     @Environment(\.dismiss) var dismiss
 
+    @State private var searchText: String = ""
+    @State private var filterMode: WordListFilter = .all
+
+    private struct IndexedWord: Identifiable {
+        let id: Int
+        let word: GlideChallengeWord
+        let session: GlideRecordedSession?
+    }
+
+    private var indexedWords: [IndexedWord] {
+        words.enumerated().compactMap { idx, w in
+            let sess = sessions[w.targetWord.lowercased()]
+            let rank = sess?.targetRank(matchUnaccented: true) ?? 0
+
+            switch filterMode {
+            case .all:
+                break
+            case .unrecorded:
+                if sess != nil { return nil }
+            case .failed:
+                if sess == nil || rank > 0 { return nil }
+            case .passed:
+                if sess == nil || rank == 0 { return nil }
+            }
+
+            if !searchText.isEmpty {
+                let query = searchText.lowercased()
+                let matchTarget = w.targetWord.lowercased().contains(query)
+                let matchHint = w.hintPath.lowercased().contains(query)
+                let matchCat = w.category.lowercased().contains(query)
+                if !matchTarget && !matchHint && !matchCat {
+                    return nil
+                }
+            }
+
+            return IndexedWord(id: idx, word: w, session: sess)
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(0..<words.count, id: \.self) { idx in
-                    let w = words[idx]
-                    let sess = sessions[w.targetWord.lowercased()]
-                    Button(action: {
-                        selectedCategory = "Tất cả"
-                        currentIndex = idx
-                        dismiss()
-                    }) {
-                        HStack {
+            VStack(spacing: 0) {
+                Picker("Bộ lọc", selection: $filterMode) {
+                    ForEach(WordListFilter.allCases) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+
+                ScrollViewReader { proxy in
+                    List {
+                        ForEach(indexedWords) { item in
+                            let idx = item.id
+                            let w = item.word
+                            let sess = item.session
                             let rank = sess?.targetRank(matchUnaccented: true) ?? 0
-                            Circle()
-                                .fill(sess == nil ? Color.gray.opacity(0.4) : (rank == 1 ? Color.green : (rank == 2 ? Color.blue : (rank == 3 ? Color.orange : Color.red))))
-                                .frame(width: 10, height: 10)
+                            let isCurrent = (idx == currentIndex)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(idx + 1). \(w.targetWord)")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Text("\(w.hintPath) (\(w.category))")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                            Button(action: {
+                                selectedCategory = "Tất cả"
+                                currentIndex = idx
+                                dismiss()
+                            }) {
+                                HStack {
+                                    Circle()
+                                        .fill(sess == nil ? Color.gray.opacity(0.4) : (rank == 1 ? Color.green : (rank == 2 ? Color.blue : (rank == 3 ? Color.orange : Color.red))))
+                                        .frame(width: 10, height: 10)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack(spacing: 4) {
+                                            Text("\(idx + 1). \(w.targetWord)")
+                                                .font(.headline)
+                                                .foregroundStyle(.primary)
+                                            if isCurrent {
+                                                Text("(Hiện tại)")
+                                                    .font(.caption2)
+                                                    .bold()
+                                                    .foregroundStyle(.blue)
+                                            }
+                                        }
+                                        Text("\(w.hintPath) (\(w.category))")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    if let s = sess {
+                                        Text(s.rankLabel(matchUnaccented: true))
+                                            .font(.caption)
+                                            .bold()
+                                            .foregroundStyle(rank == 1 ? .green : (rank == 2 ? .blue : (rank == 3 ? .orange : .red)))
+                                    } else {
+                                        Text("Chưa thu thập")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
                             }
-
-                            Spacer()
-
-                            if let s = sess {
-                                Text(s.rankLabel(matchUnaccented: true))
-                                    .font(.caption)
-                                    .bold()
-                                    .foregroundStyle(rank == 1 ? .green : (rank == 2 ? .blue : (rank == 3 ? .orange : .red)))
-                            } else {
-                                Text("Chưa thu thập")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                            .id(idx)
+                            .listRowBackground(isCurrent ? Color.blue.opacity(0.12) : Color.clear)
+                        }
+                    }
+                    .searchable(text: $searchText, prompt: "Tìm từ, lộ trình...")
+                    .onAppear {
+                        if currentIndex >= 0 && currentIndex < words.count {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                withAnimation {
+                                    proxy.scrollTo(currentIndex, anchor: .center)
+                                }
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Danh sách \(words.count) từ")
+            .navigationTitle("Danh sách (\(indexedWords.count)/\(words.count) từ)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

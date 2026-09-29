@@ -515,10 +515,17 @@ public final class vBoardSettings: @unchecked Sendable {
         return total
     }
 
-    /// Phím chuyển đổi bàn phím hệ thống (Globe) luôn được hiển thị để tuân thủ Apple HIG Guideline 4.4.1
+    /// Ẩn phím chuyển đổi ngôn ngữ / quả địa cầu (Globe) - mặc định ẩn theo yêu cầu
     public var isGlobeKeyHidden: Bool {
-        get { false }
-        set { }
+        get {
+            if let val = defaults.object(forKey: Keys.isGlobeKeyHidden) as? Bool {
+                return val
+            }
+            return true
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.isGlobeKeyHidden)
+        }
     }
 
     /// Hiển thị hàng phím số chuyên dụng ở trên cùng

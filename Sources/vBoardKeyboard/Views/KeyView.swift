@@ -68,6 +68,11 @@ public final class KeyView: UIControl {
                 secondaryIconView.contentMode = .scaleAspectFit
                 secondaryIconView.isUserInteractionEnabled = false
                 addSubview(secondaryIconView)
+            } else if secondary == "dismiss" || secondary == "⤓" {
+                secondaryIconView.image = KeyboardIcons.dismissIcon(size: CGSize(width: 10, height: 8))
+                secondaryIconView.contentMode = .scaleAspectFit
+                secondaryIconView.isUserInteractionEnabled = false
+                addSubview(secondaryIconView)
             } else {
                 secondaryLabel.text = secondary
                 secondaryLabel.textAlignment = .center

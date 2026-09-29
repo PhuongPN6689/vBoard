@@ -95,6 +95,14 @@ public final class KeyCalloutView: UIView {
                 iconView.contentMode = .center
                 iconView.tag = 999
                 label.addSubview(iconView)
+            } else if item == "dismiss" || item == "keyboard.chevron.compact.down" || item == "⤓" {
+                // Hiển thị biểu tượng đóng bàn phím Vector khi nhấn giữ dấu phẩy
+                label.text = nil
+                let iconView = UIImageView(image: KeyboardIcons.dismissIcon(size: CGSize(width: 20, height: 16)))
+                iconView.tintColor = textColor
+                iconView.contentMode = .center
+                iconView.tag = 999
+                label.addSubview(iconView)
             } else {
                 label.text = item
                 label.font = (item.count > 1) ? UIFont.systemFont(ofSize: 15, weight: .medium) : UIFont.systemFont(ofSize: 19, weight: .regular)
@@ -299,8 +307,8 @@ public final class KeyCalloutView: UIView {
                 ";", "/", "(", ")", "#", "!", "?", "."
             ]
         case ",":
-            // Phím phẩy tích hợp thao tác nhanh: Emoji, Cài đặt ứng dụng chính
-            return ["☺", "⚙️"]
+            // Phím phẩy tích hợp thao tác nhanh: Đóng bàn phím (icon dismiss), Emoji, Cài đặt ứng dụng chính
+            return ["dismiss", "☺", "⚙️"]
 
         // Ký tự tiền tệ & toán học
         case "$": return ["₫", "€", "£", "¥", "¢", "$"]

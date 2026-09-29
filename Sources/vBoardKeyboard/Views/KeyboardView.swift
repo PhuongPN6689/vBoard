@@ -829,15 +829,18 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         let isCommaEnabled = settings.isCommaKeyEnabled
         let isPeriodEnabled = settings.isPeriodKeyEnabled
+        let isGlobeHidden = settings.isGlobeKeyHidden
 
         var row4: [KeyboardKey] = [
-            KeyboardKey.modeSwitch("?123", weight: 1.3),
-            KeyboardKey.globe(weight: 1.0)
+            KeyboardKey.modeSwitch("?123", weight: 1.3)
         ]
-        if isCommaEnabled {
-            row4.append(KeyboardKey.char(",", secondary: "☺", weight: 1.0))
+        if !isGlobeHidden {
+            row4.append(KeyboardKey.globe(weight: 1.0))
         }
-        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.2))
+        if isCommaEnabled {
+            row4.append(KeyboardKey.char(",", secondary: "⤓", weight: 1.0))
+        }
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: isGlobeHidden ? 5.2 : 4.2))
         if isPeriodEnabled {
             row4.append(KeyboardKey.char(".", weight: 1.0))
         }
@@ -859,15 +862,18 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         r3.append(contentsOf: ["*", "\"", "'", ":", ";", "!", "?"].map { KeyboardKey.char($0) })
         r3.append(KeyboardKey.delete(weight: 1.55))
 
-        let row4: [KeyboardKey] = [
-            KeyboardKey.modeSwitch("ABC", weight: 1.2),
-            KeyboardKey.globe(weight: 1.0),
-            KeyboardKey.char(",", weight: 1.0),
-            KeyboardKey.modeSwitch("12/34", weight: 1.0),
-            KeyboardKey.space(label: "Tiếng Việt", weight: 3.5),
-            KeyboardKey.char(".", weight: 1.0),
-            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5)
+        let isGlobeHidden = vBoardSettings.shared.isGlobeKeyHidden
+        var row4: [KeyboardKey] = [
+            KeyboardKey.modeSwitch("ABC", weight: 1.2)
         ]
+        if !isGlobeHidden {
+            row4.append(KeyboardKey.globe(weight: 1.0))
+        }
+        row4.append(KeyboardKey.char(",", secondary: "⤓", weight: 1.0))
+        row4.append(KeyboardKey.modeSwitch("12/34", weight: 1.0))
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: isGlobeHidden ? 4.5 : 3.5))
+        row4.append(KeyboardKey.char(".", weight: 1.0))
+        row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5))
 
         return [r1, r2, r3, row4]
     }
@@ -880,15 +886,18 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         r3.append(contentsOf: ["%", "©", "®", "™", "✓", "[", "]"].map { KeyboardKey.char($0) })
         r3.append(KeyboardKey.delete(weight: 1.55))
 
-        let row4: [KeyboardKey] = [
-            KeyboardKey.modeSwitch("ABC", weight: 1.2),
-            KeyboardKey.globe(weight: 1.0),
-            KeyboardKey.char("←", weight: 1.0),
-            KeyboardKey.modeSwitch("12/34", weight: 1.0),
-            KeyboardKey.space(label: "Tiếng Việt", weight: 3.5),
-            KeyboardKey.char("→", weight: 1.0),
-            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5)
+        let isGlobeHidden = vBoardSettings.shared.isGlobeKeyHidden
+        var row4: [KeyboardKey] = [
+            KeyboardKey.modeSwitch("ABC", weight: 1.2)
         ]
+        if !isGlobeHidden {
+            row4.append(KeyboardKey.globe(weight: 1.0))
+        }
+        row4.append(KeyboardKey.char("←", weight: 1.0))
+        row4.append(KeyboardKey.modeSwitch("12/34", weight: 1.0))
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: isGlobeHidden ? 4.5 : 3.5))
+        row4.append(KeyboardKey.char("→", weight: 1.0))
+        row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5))
 
         return [r1, r2, r3, row4]
     }
@@ -902,13 +911,15 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             KeyboardKey.char("9", weight: 1.0),
             KeyboardKey.delete(weight: 1.0)
         ]
-        let r4: [KeyboardKey] = [
-            KeyboardKey.globe(weight: 0.9),
-            KeyboardKey.modeSwitch("ABC", weight: 1.0),
-            KeyboardKey.char("0", weight: 1.1),
-            KeyboardKey.char(".", weight: 0.9),
-            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.1)
-        ]
+        let isGlobeHidden = vBoardSettings.shared.isGlobeKeyHidden
+        var r4: [KeyboardKey] = []
+        if !isGlobeHidden {
+            r4.append(KeyboardKey.globe(weight: 0.9))
+        }
+        r4.append(KeyboardKey.modeSwitch("ABC", weight: isGlobeHidden ? 1.4 : 1.0))
+        r4.append(KeyboardKey.char("0", weight: 1.1))
+        r4.append(KeyboardKey.char(".", weight: 0.9))
+        r4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.1))
 
         return [r1, r2, r3, r4]
     }
@@ -1365,7 +1376,10 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
     // MARK: - KeyCalloutViewDelegate
     public func keyCalloutView(_ calloutView: KeyCalloutView, didSelectItem text: String) {
-        if text == "⚙️" || text == "settings" {
+        if text == "dismiss" || text == "keyboard.chevron.compact.down" || text == "⤓" {
+            handleDismissTap()
+            return
+        } else if text == "⚙️" || text == "settings" {
             delegate?.keyboardViewDidOpenSettingsApp(self)
             return
         } else if text == "☺" || text == "😊" || text == "emoji" {
