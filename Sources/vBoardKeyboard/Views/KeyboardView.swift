@@ -6,7 +6,6 @@ import vBoardEngine
 public protocol KeyboardViewDelegate: AnyObject {
     func keyboardView(_ keyboardView: KeyboardView, didPressKey key: KeyboardKey)
     func keyboardView(_ keyboardView: KeyboardView, didLongPressKey key: KeyboardKey)
-    func keyboardViewDidRequestNextKeyboard(_ keyboardView: KeyboardView)
     func keyboardViewDidDismiss(_ keyboardView: KeyboardView)
     func keyboardView(_ keyboardView: KeyboardView, didGlideWord word: String)
     func keyboardViewDidRequestEmojiPicker(_ keyboardView: KeyboardView)
@@ -37,8 +36,6 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             }
         }
     }
-    public private(set) weak var globeKeyView: KeyView?
-    public var onGlobeKeyConfigured: ((KeyView) -> Void)?
     public private(set) var textEditingView: TextEditingView?
     public private(set) var quickSettingsView: QuickSettingsView?
     public private(set) var clipboardView: ClipboardView?
@@ -80,34 +77,13 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
     public var spaceCursorHandler: SpaceCursorHandler?
     public var backspaceSwipeHandler: BackspaceSwipeHandler?
 
-    /// Tùy biến khoảng đệm mép dưới bàn phím (nếu có)
+    /// Tùy biến khoảng đệm mép dưới bàn phím (nếu có).
+    /// Người nhúng (controller bàn phím thật / phòng thí nghiệm) tự tính và truyền vào;
+    /// mặc định 4pt = sát đáy, KeyboardView KHÔNG tự nâng.
     public var customBottomPadding: CGFloat? = nil
 
-    /// Khoảng đệm an toàn mép dưới thực tế (tương ứng với vị trí phím Home Indicator trên iPhone thật)
     public var effectiveBottomPadding: CGFloat {
-        if let custom = customBottomPadding {
-            return custom
-        }
-        let bottomSafe = max(safeAreaInsets.bottom, 0)
-        if bottomSafe > 0 {
-            return max(bottomSafe - 6.0, 4.0)
-        }
-        #if canImport(UIKit)
-        if let window = self.window, window.safeAreaInsets.bottom > 0 {
-            return max(window.safeAreaInsets.bottom - 6.0, 4.0)
-        }
-        for scene in UIApplication.shared.connectedScenes {
-            if let windowScene = scene as? UIWindowScene {
-                for window in windowScene.windows where window.isKeyWindow {
-                    if window.safeAreaInsets.bottom > 0 {
-                        return max(window.safeAreaInsets.bottom - 6.0, 4.0)
-                    }
-                }
-            }
-        }
-        #endif
-        let isPad = UIDevice.current.userInterfaceIdiom == .pad
-        return isPad ? 14.0 : 28.0
+        customBottomPadding ?? 4.0
     }
 
     public override init(frame: CGRect) {
@@ -754,7 +730,6 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             }
         }
         rowViews.removeAll()
-        globeKeyView = nil
 
         if isNumberPadActive {
             currentRows = makeDedicatedNumberPadLayout()
@@ -779,9 +754,6 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
                     spaceCursorHandler?.attach(to: kv)
                 } else if case .delete = key.type {
                     backspaceSwipeHandler?.attach(to: kv)
-                } else if case .globe = key.type {
-                    globeKeyView = kv
-                    onGlobeKeyConfigured?(kv)
                 }
             }
             rowViews.append(viewsInRow)
@@ -829,18 +801,14 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
 
         let isCommaEnabled = settings.isCommaKeyEnabled
         let isPeriodEnabled = settings.isPeriodKeyEnabled
-        let isGlobeHidden = settings.isGlobeKeyHidden
 
         var row4: [KeyboardKey] = [
             KeyboardKey.modeSwitch("?123", weight: 1.3)
         ]
-        if !isGlobeHidden {
-            row4.append(KeyboardKey.globe(weight: 1.0))
-        }
         if isCommaEnabled {
             row4.append(KeyboardKey.char(",", secondary: "⤓", weight: 1.0))
         }
-        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: isGlobeHidden ? 5.2 : 4.2))
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 5.2))
         if isPeriodEnabled {
             row4.append(KeyboardKey.char(".", weight: 1.0))
         }
@@ -862,16 +830,12 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         r3.append(contentsOf: ["*", "\"", "'", ":", ";", "!", "?"].map { KeyboardKey.char($0) })
         r3.append(KeyboardKey.delete(weight: 1.55))
 
-        let isGlobeHidden = vBoardSettings.shared.isGlobeKeyHidden
         var row4: [KeyboardKey] = [
             KeyboardKey.modeSwitch("ABC", weight: 1.2)
         ]
-        if !isGlobeHidden {
-            row4.append(KeyboardKey.globe(weight: 1.0))
-        }
         row4.append(KeyboardKey.char(",", secondary: "⤓", weight: 1.0))
         row4.append(KeyboardKey.modeSwitch("12/34", weight: 1.0))
-        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: isGlobeHidden ? 4.5 : 3.5))
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.5))
         row4.append(KeyboardKey.char(".", weight: 1.0))
         row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5))
 
@@ -886,16 +850,12 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
         r3.append(contentsOf: ["%", "©", "®", "™", "✓", "[", "]"].map { KeyboardKey.char($0) })
         r3.append(KeyboardKey.delete(weight: 1.55))
 
-        let isGlobeHidden = vBoardSettings.shared.isGlobeKeyHidden
         var row4: [KeyboardKey] = [
             KeyboardKey.modeSwitch("ABC", weight: 1.2)
         ]
-        if !isGlobeHidden {
-            row4.append(KeyboardKey.globe(weight: 1.0))
-        }
         row4.append(KeyboardKey.char("←", weight: 1.0))
         row4.append(KeyboardKey.modeSwitch("12/34", weight: 1.0))
-        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: isGlobeHidden ? 4.5 : 3.5))
+        row4.append(KeyboardKey.space(label: "Tiếng Việt", weight: 4.5))
         row4.append(KeyboardKey.char("→", weight: 1.0))
         row4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.5))
 
@@ -911,15 +871,12 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             KeyboardKey.char("9", weight: 1.0),
             KeyboardKey.delete(weight: 1.0)
         ]
-        let isGlobeHidden = vBoardSettings.shared.isGlobeKeyHidden
-        var r4: [KeyboardKey] = []
-        if !isGlobeHidden {
-            r4.append(KeyboardKey.globe(weight: 0.9))
-        }
-        r4.append(KeyboardKey.modeSwitch("ABC", weight: isGlobeHidden ? 1.4 : 1.0))
-        r4.append(KeyboardKey.char("0", weight: 1.1))
-        r4.append(KeyboardKey.char(".", weight: 0.9))
-        r4.append(KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.1))
+        var r4: [KeyboardKey] = [
+            KeyboardKey.modeSwitch("ABC", weight: 1.4),
+            KeyboardKey.char("0", weight: 1.1),
+            KeyboardKey.char(".", weight: 0.9),
+            KeyboardKey.returnKey(actionType: currentReturnKeyType, label: "nhập", weight: 1.1)
+        ]
 
         return [r1, r2, r3, r4]
     }
@@ -1268,9 +1225,6 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             buildCurrentLayout()
             HapticManager.shared.playSpecialKey()
 
-        case .globe:
-            delegate?.keyboardViewDidRequestNextKeyboard(self)
-
         case .emoji:
             HapticManager.shared.playSpecialKey()
             delegate?.keyboardViewDidRequestEmojiPicker(self)
@@ -1359,9 +1313,6 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             } else if selected == "☺" || selected == "😊" || selected == "emoji" {
                 delegate?.keyboardViewDidRequestEmojiPicker(self)
                 return selected
-            } else if selected == "🌐" {
-                delegate?.keyboardViewDidRequestNextKeyboard(self)
-                return selected
             }
             let simulatedKey = KeyboardKey.char(selected)
             delegate?.keyboardView(self, didPressKey: simulatedKey)
@@ -1384,9 +1335,6 @@ public final class KeyboardView: UIView, KeyViewDelegate, UIGestureRecognizerDel
             return
         } else if text == "☺" || text == "😊" || text == "emoji" {
             delegate?.keyboardViewDidRequestEmojiPicker(self)
-            return
-        } else if text == "🌐" {
-            delegate?.keyboardViewDidRequestNextKeyboard(self)
             return
         }
         let simulatedKey = KeyboardKey.char(text)

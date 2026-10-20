@@ -8,7 +8,6 @@ public enum KeyType: Equatable, Sendable {
     case shift
     case returnKey
     case modeSwitch(String) // "123", "ABC", "#+="
-    case globe
     case emoji
     case dismiss
 }
@@ -57,10 +56,6 @@ public struct KeyboardKey: Equatable, Sendable {
 
     public static func modeSwitch(_ label: String, weight: CGFloat = 1.55) -> KeyboardKey {
         return KeyboardKey(type: .modeSwitch(label), displayLabel: label, secondaryLabel: nil, flexWeight: weight)
-    }
-
-    public static func globe(weight: CGFloat = 1.0) -> KeyboardKey {
-        return KeyboardKey(type: .globe, displayLabel: "🌐", secondaryLabel: nil, flexWeight: weight)
     }
 
     public static func emoji(weight: CGFloat = 1.0) -> KeyboardKey {

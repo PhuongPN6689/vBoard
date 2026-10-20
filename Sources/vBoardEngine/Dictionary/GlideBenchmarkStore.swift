@@ -236,6 +236,22 @@ public final class GlideBenchmarkStore: @unchecked Sendable {
         GlideChallengeWord(targetWord: "nguyện", hintPath: "n - g - u - y - e - n", category: "Từ 6 ký tự", note: "Từ thuần Việt 6 ký tự")
     ]
 
+    // MARK: - Lưu/nạp bộ 100 từ ngẫu nhiên (giữ nguyên danh sách giữa các lần mở app)
+    private static let random100StorageKey = "vboard_benchmark_random100_words"
+
+    public static func persistRandom100Words(_ words: [GlideChallengeWord]) {
+        if let data = try? JSONEncoder().encode(words) {
+            UserDefaults.standard.set(data, forKey: random100StorageKey)
+        }
+    }
+
+    public static func loadPersistedRandom100Words() -> [GlideChallengeWord]? {
+        guard let data = UserDefaults.standard.data(forKey: random100StorageKey),
+              let words = try? JSONDecoder().decode([GlideChallengeWord].self, from: data),
+              !words.isEmpty else { return nil }
+        return words
+    }
+
     // MARK: - Bộ 100 từ ngẫu nhiên cân bằng từ từ điển tiếng Việt
     public static func generateRandom100Words() -> [GlideChallengeWord] {
         let pool2 = [

@@ -428,7 +428,18 @@ public struct GlideBenchmarkView: View {
             syncSettingsWithKeyboard()
             setupKeyboardCallback()
             loadSavedSessions()
-            restoreSavedIndex(for: activeSet)
+            // Khôi phục đúng bộ từ + danh sách từ đã lưu để tiếp tục phiên đang dở (không nhảy về từ số 1)
+            let savedSet = restoreActiveSet()
+            if savedSet != activeSet {
+                switchWordSet(to: savedSet)
+            } else if activeSet == .random100 {
+                if let saved = GlideBenchmarkStore.loadPersistedRandom100Words() {
+                    words = saved
+                }
+                restoreSavedIndex(for: activeSet)
+            } else {
+                restoreSavedIndex(for: activeSet)
+            }
         }
         .onChange(of: currentIndex) { _ in
             saveCurrentIndex()
@@ -1036,6 +1047,21 @@ public struct GlideBenchmarkView: View {
         playbackProgress = 0.0
     }
 
+    // MARK: - Lưu/khôi phục bộ từ đang chọn (để tiếp tục phiên kiểm thử giữa các lần mở app)
+    private static let activeSetKey = "vboard_benchmark_activeSet"
+
+    private func persistActiveSet() {
+        UserDefaults.standard.set(activeSet.rawValue, forKey: Self.activeSetKey)
+    }
+
+    private func restoreActiveSet() -> BenchmarkWordSet {
+        if let raw = UserDefaults.standard.string(forKey: Self.activeSetKey),
+           let set = BenchmarkWordSet(rawValue: raw) {
+            return set
+        }
+        return .standard50
+    }
+
     private func switchWordSet(to set: BenchmarkWordSet) {
         activeSet = set
         selectedCategory = "Tất cả"
@@ -1043,20 +1069,31 @@ public struct GlideBenchmarkView: View {
         case .standard50:
             words = GlideBenchmarkStore.default50Words
         case .random100:
-            words = GlideBenchmarkStore.generateRandom100Words()
+            // Ưu tiên danh sách đã lưu để thứ tự từ không đổi giữa các lần mở app
+            if let saved = GlideBenchmarkStore.loadPersistedRandom100Words() {
+                words = saved
+            } else {
+                let generated = GlideBenchmarkStore.generateRandom100Words()
+                GlideBenchmarkStore.persistRandom100Words(generated)
+                words = generated
+            }
         case .top1000:
             words = GlideBenchmarkStore.getTop1000Words()
         }
         restoreSavedIndex(for: set)
+        persistActiveSet()
         resetPlaybackState()
     }
 
     private func regenerateRandom100() {
         activeSet = .random100
         selectedCategory = "Tất cả"
-        words = GlideBenchmarkStore.generateRandom100Words()
+        let generated = GlideBenchmarkStore.generateRandom100Words()
+        GlideBenchmarkStore.persistRandom100Words(generated)
+        words = generated
         currentIndex = 0
         saveCurrentIndex()
+        persistActiveSet()
         resetPlaybackState()
     }
 

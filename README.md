@@ -1,6 +1,25 @@
 # vBoard - Bàn phím iOS Siêu Tốc Độ cho Người Việt
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-iOS%2016%2B-blue)](#-yêu-cầu-hệ-thống)
+[![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
+[![Swift Package Manager](https://img.shields.io/badge/SPM-compatible-brightgreen)](Package.swift)
+
 **vBoard** là dự án bàn phím iOS được thiết kế với triết lý: **Kế thừa các cử chỉ thông minh nhất của Gboard** (trượt Space di chuyển con trỏ, vuốt Backspace xóa nhanh, ký tự phụ khi nhấn giữ, phản hồi rung giòn tan), kết hợp **lõi bộ gõ tiếng Việt OpenKey** tối ưu hóa cực đoan cho `UITextDocumentProxy`, đồng thời loại bỏ hoàn toàn các tính năng thừa thãi (bloatware) để đạt tốc độ khởi động < 25ms và mức tiêu thụ RAM cực thấp (< 18MB).
+
+> 🇻🇳 **Bộ gõ tiếng Việt hoàn chỉnh: Telex, VNI, Simple Telex — hoạt động 100% offline, không cần "Allow Full Access".**
+
+---
+
+## ✨ Tính năng nổi bật
+
+| Nhóm | Tính năng |
+|------|-----------|
+| **Bộ gõ tiếng Việt** | Telex, VNI, Simple Telex 1 & 2; gõ trễ mũ/dấu (`motoj => một`); gỡ dấu bằng phím `z`; bỏ dấu tự do; kiểm tra chính tả; 2 chuẩn chính tả (`oà, uý` / `òá, úy`) |
+| **Cử chỉ Gboard** | Trượt Space di chuyển con trỏ; vuốt Backspace xóa nhanh; nhấn giữ phím chọn ký tự phụ; gõ lướt (Glide Typing) có vệt ký tự |
+| **Thông minh** | Gợi ý từ mềm (diacritic-agnostic) trên Trie > 15.000 từ; dự đoán từ kế tiếp (Bi-gram); gợi ý Emoji theo ngữ cảnh; macro gõ tắt cá nhân hóa |
+| **Tiện ích** | Lịch sử Clipboard; bảng chọn Emoji phân loại; bảng điều hướng con trỏ & chọn văn bản; menu cài đặt nhanh ngay trên bàn phím |
+| **Hiệu năng** | Layout hình học thuần CALayer, zero AutoLayout; Haptic Engine pre-warmed; hoàn toàn offline |
 
 ---
 
@@ -9,6 +28,27 @@
 * **Thời gian khởi động bàn phím (Cold Start):** **< 20ms** (nhờ cơ chế layout hình học thuần túy, zero AutoLayout overhead).
 * **Mức chiếm dụng RAM:** **~14MB - 17MB** (cách xa ngưỡng giới hạn 45MB của Apple).
 * **Tỷ lệ văng / crash ứng dụng:** **0%** do không tải ảnh động GIF, không chạy webview hay AI model nặng nề.
+
+---
+
+## 🔒 Quyền riêng tư & Bảo mật
+
+vBoard được thiết kế **không thu thập bất kỳ dữ liệu nào**:
+
+- ✅ **Hoàn toàn offline** — không gửi bất kỳ request mạng nào, không analytics, không tracking.
+- ✅ **Không cần "Allow Full Access"** — bàn phím hoạt động đầy đủ ngay cả khi tắt quyền này.
+- ✅ Kèm file [`PrivacyInfo.xcprivacy`](KeyboardExtension/PrivacyInfo.xcprivacy) khai báo không thu thập dữ liệu theo chuẩn của Apple.
+- ✅ Cấu hình & macro đồng bộ qua **App Group + Darwin Notification IPC** ngay trên thiết bị.
+
+---
+
+## 📋 Yêu cầu Hệ thống
+
+| Yêu cầu | Chi tiết |
+|---------|----------|
+| Hệ điều hành | iOS 16.0+ (macOS 13+ nếu build engine cho Mac) |
+| Ngôn ngữ | Swift 6.0 |
+| Công cụ | Xcode 16+ hoặc Swift Package Manager |
 
 ---
 
@@ -86,6 +126,35 @@ swift test
 
 ---
 
+## 🤝 Đóng góp (Contributing)
+
+Mọi đóng góp đều được hoan nghênh! Vui lòng đọc [CONTRIBUTING.md](CONTRIBUTING.md) để biết quy chuẩn:
+
+- **Bắt buộc** chạy 100% bộ kiểm thử trước khi commit hoặc tạo Pull Request.
+- Tiêu đề commit theo chuẩn **Conventional Commits**.
+
+---
+
+## 🗺 Lộ trình (Roadmap)
+
+- [ ] Thêm khả năng tùy chỉnh giao diện bàn phím (theme sáng/tối, màu accent).
+- [ ] Mở rộng từ điển gợi ý và học từ người dùng (on-device).
+- [ ] Hỗ trợ gõ lướt cho các ngôn ngữ khác.
+
+> 💡 Có ý tưởng mới? Tạo [Issue](../../issues) để thảo luận!
+
+---
+
+## 🚀 Chạy nhanh với Demo App
+
+Repo kèm sẵn app demo ([HostApp/](HostApp/)) và Xcode project ([vBoard.xcodeproj](vBoard.xcodeproj)) được sinh bằng [XcodeGen](https://github.com/yonaskolb/XcodeGen) từ [project.yml](project.yml):
+
+1. Mở `vBoard.xcodeproj` bằng Xcode.
+2. Chọn scheme `vBoardApp` và chạy trên máy ảo/thiết bị iOS.
+3. Vào **Settings > General > Keyboard > Keyboards > Add New Keyboard...** và chọn **vBoard** để dùng thử.
+
+---
+
 ## 📲 Cách tích hợp vào Xcode để tạo Bàn phím iOS
 
 1. **Mở hoặc Tạo dự án Xcode:**
@@ -109,3 +178,38 @@ swift test
    * `PrefersRightToLeft`: `NO`
    * `PrimaryLanguage`: `vi-VN`
    * `RequestsOpenAccess`: `NO` (vBoard chạy hoàn toàn **Offline**, không cần bật "Allow Full Access" vẫn hoạt động mượt mà 100%!).
+
+---
+
+## 📄 Giấy phép (License)
+
+Dự án này được phát hành dưới giấy phép **GNU General Public License v3.0 (GPL-3.0)** — xem chi tiết tại file [LICENSE](LICENSE).
+
+```
+vBoard - Vietnamese keyboard for iOS
+Copyright (C) 2026 Nguyen Phuong
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+```
+
+### Ghi công (Attribution)
+
+Lõi bộ gõ tiếng Việt trong `Sources/vBoardEngine/OpenKey/` là bản chuyển đổi 1-1 sang Swift từ engine **OpenKey** (C++) của tác giả **Mai Vũ Tuyên**, phát hành dưới giấy phép GPL-3.0:
+
+> OpenKey — Vietnamese Input for macOS, Windows and Linux
+> © Mai Vũ Tuyên — https://github.com/tuyenvm/OpenKey
+
+Theo điều khoản GPL-3.0, mọi sản phẩm phái sinh từ mã nguồn này (bao gồm cả vBoard) khi phân phối đều phải:
+- Cung cấp mã nguồn tương ứng cho người nhận, dưới giấy phép GPL-3.0.
+- Giữ nguyên thông tin ghi công tác giả gốc.
+- Giấy phép **không** yêu cầu phần mềm phải miễn phí hay cấm quảng cáo — bạn hoàn toàn có thể phân phối có phí hoặc kèm quảng cáo, miễn là tuân thủ các điều khoản mã nguồn mở ở trên.
+
+> ⚠️ **Lưu ý cho App Store:** GPL-3.0 có thể xung khắc với một số điều khoản phân phối của Apple App Store. Nếu bạn dự định phân phối app qua App Store, hãy cân nhắc kỹ (xem [thảo luận của FSF về App Store](https://www.fsf.org/blogs/licensing/more-about-the-app-store-gpl-enforcement-letter)).

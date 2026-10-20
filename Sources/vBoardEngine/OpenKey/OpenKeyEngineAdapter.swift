@@ -5,6 +5,9 @@
 //  Bộ chuyển đổi kết nối OpenKeyEngine với kiến trúc bàn phím vBoard.
 //  Tuân thủ giao diện EngineAction (deleteCount: Int, textToInsert: String).
 //
+//  OpenKey gốc: https://github.com/tuyenvm/OpenKey — © Mai Vũ Tuyên, GPL-3.0.
+//  File này là sản phẩm phái sinh, được cấp phép theo GNU GPL-3.0 (xem LICENSE ở gốc repo).
+//
 
 import Foundation
 

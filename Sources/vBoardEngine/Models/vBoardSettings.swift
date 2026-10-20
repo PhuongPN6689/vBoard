@@ -222,7 +222,6 @@ public final class vBoardSettings: @unchecked Sendable {
 
         static let keyboardHeightScale = "vboard_height_scale"
         static let keyboardBottomOffset = "vboard_bottom_offset"
-        static let isGlobeKeyHidden = "vboard_hide_globe_key"
         static let isNumberRowEnabled = "vboard_number_row"
         static let isHintSymbolsEnabled = "vboard_hint_symbols"
 
@@ -508,24 +507,11 @@ public final class vBoardSettings: @unchecked Sendable {
             total += 42.0
         }
 
-        let baseBottomPadding: CGFloat = customBottomPadding ?? (isPad ? 14.0 : 28.0)
+        let baseBottomPadding: CGFloat = customBottomPadding ?? 4.0
         let totalBottomPadding = max(4.0, baseBottomPadding + CGFloat(keyboardBottomOffset))
         total += totalBottomPadding
 
         return total
-    }
-
-    /// Ẩn phím chuyển đổi ngôn ngữ / quả địa cầu (Globe) - mặc định ẩn theo yêu cầu
-    public var isGlobeKeyHidden: Bool {
-        get {
-            if let val = defaults.object(forKey: Keys.isGlobeKeyHidden) as? Bool {
-                return val
-            }
-            return true
-        }
-        set {
-            defaults.set(newValue, forKey: Keys.isGlobeKeyHidden)
-        }
     }
 
     /// Hiển thị hàng phím số chuyên dụng ở trên cùng

@@ -5,6 +5,9 @@
 //  Chuyển đổi 1-1 từ Engine.h và Engine.cpp của OpenKey (tác giả Mai Vũ Tuyên).
 //  Toàn bộ state machine, kiểm tra chính tả, đặt dấu và khôi phục từ tiếng Việt.
 //
+//  OpenKey gốc: https://github.com/tuyenvm/OpenKey — © Mai Vũ Tuyên, GPL-3.0.
+//  File này là sản phẩm phái sinh, được cấp phép theo GNU GPL-3.0 (xem LICENSE ở gốc repo).
+//
 
 import Foundation
 

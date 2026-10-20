@@ -74,6 +74,7 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         keyboardView.delegate = self
         keyboardView.suggestionBar.delegate = self
         keyboardView.configureGestures(proxy: proxyWrapper)
+        keyboardView.customBottomPadding = computedRealBottomPadding()
         keyboardView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(keyboardView)
 
@@ -88,15 +89,6 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         HapticManager.shared.prepare()
         ActionHistoryManager.shared.onHistoryStateChanged = { [weak self] in
             self?.keyboardView.suggestionBar.updateHistoryButtons()
-        }
-
-        // Đảm bảo phím Globe luôn được kết nối với menu chuyển bàn phím hệ thống của Apple kể cả khi đổi layout
-        keyboardView.onGlobeKeyConfigured = { [weak self] globe in
-            guard let self = self else { return }
-            globe.addTarget(self, action: #selector(self.handleInputModeList(from:with:)), for: .allTouchEvents)
-        }
-        if let globe = keyboardView.globeKeyView {
-            globe.addTarget(self, action: #selector(handleInputModeList(from:with:)), for: .allTouchEvents)
         }
 
         // Lắng nghe tín hiệu Darwin IPC từ Host App Settings (< 0.1ms)
@@ -182,10 +174,9 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         }
 
         // Bổ sung khoảng đệm an toàn mép dưới (Home Indicator) và độ nâng tùy chỉnh
-        let bottomSafeInset = view.safeAreaInsets.bottom
-        let baseBottomPadding: CGFloat = bottomSafeInset > 0 ? max(bottomSafeInset - 6.0, 4.0) : (isPad ? 14.0 : 28.0)
-        let totalBottomPadding = max(4.0, baseBottomPadding + CGFloat(settings.keyboardBottomOffset))
+        let totalBottomPadding = computedRealBottomPadding()
         calculatedHeight += totalBottomPadding
+        keyboardView.customBottomPadding = totalBottomPadding
 
         if heightConstraint == nil {
             heightConstraint = view.heightAnchor.constraint(equalToConstant: calculatedHeight)
@@ -250,9 +241,8 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
         let isSecure = textDocumentProxy.isSecureTextEntry ?? false
         let isPassword = (textDocumentProxy.textContentType == .password || textDocumentProxy.textContentType == .newPassword)
         let isNumberRowActive = settings.isNumberRowEnabled || (settings.isNumberRowForPasswordEnabled && (isSecure || isPassword))
-        let bottomSafeInset = view.safeAreaInsets.bottom
-        let baseBottomPadding: CGFloat = bottomSafeInset > 0 ? max(bottomSafeInset - 6.0, 4.0) : (isPad ? 14.0 : 28.0)
-        let totalBottomPadding = max(4.0, baseBottomPadding + CGFloat(settings.keyboardBottomOffset))
+        let totalBottomPadding = computedRealBottomPadding()
+        keyboardView.customBottomPadding = totalBottomPadding
 
         let scale = settings.keyboardHeightScale
         let baseHeight: CGFloat = isPad ? scale.padHeight : scale.phoneHeight
@@ -272,10 +262,15 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
 
     open override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        // Gắn tương tác chuyển bàn phím hệ thống của Apple vào phím Globe
-        if let globe = keyboardView.globeKeyView {
-            globe.addTarget(self, action: #selector(handleInputModeList(from:with:)), for: .allTouchEvents)
-        }
+    }
+
+    /// Khoảng đệm mép dưới của bàn phím THẬT: theo safe area (Home Indicator),
+    /// cộng thêm độ nâng tùy chọn người dùng đặt trong Settings.
+    private func computedRealBottomPadding() -> CGFloat {
+        let settings = vBoardSettings.shared
+        let bottomSafeInset = view.safeAreaInsets.bottom
+        let base: CGFloat = bottomSafeInset > 0 ? max(bottomSafeInset - 6.0, 4.0) : 4.0
+        return max(4.0, base + CGFloat(settings.keyboardBottomOffset))
     }
 
     private func updateWordSuggestions() {
@@ -530,10 +525,6 @@ open class KeyboardViewController: UIInputViewController, KeyboardViewDelegate, 
             }
             updateWordSuggestions()
         }
-    }
-
-    public func keyboardViewDidRequestNextKeyboard(_ keyboardView: KeyboardView) {
-        advanceToNextInputMode()
     }
 
     public func keyboardViewDidDismiss(_ keyboardView: KeyboardView) {

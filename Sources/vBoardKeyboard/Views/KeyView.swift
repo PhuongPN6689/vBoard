@@ -104,7 +104,7 @@ public final class KeyView: UIControl {
         case .modeSwitch:
             baseSize = 15.0 * scale
             weight = .regular
-        case .returnKey, .globe, .emoji, .dismiss:
+        case .returnKey, .emoji, .dismiss:
             baseSize = 15.0 * scale
             weight = .regular
         }
@@ -267,14 +267,6 @@ public final class KeyView: UIControl {
             let isCaps = (key.displayLabel == "⇪")
             let isShift = (key.displayLabel == "⬆")
             iconImageView.image = KeyboardIcons.shiftIcon(isCapsLocked: isCaps, isShiftActive: isShift)
-            iconImageView.tintColor = isDark ? darkText : lightText
-
-        case .globe:
-            backgroundColor = isDark ? darkSpecialBg : lightSpecialBg
-            label.isHidden = true
-            iconImageView.isHidden = false
-            let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
-            iconImageView.image = UIImage(systemName: "globe", withConfiguration: config)
             iconImageView.tintColor = isDark ? darkText : lightText
 
         case .emoji:
@@ -487,8 +479,13 @@ public final class KeyView: UIControl {
                 hasMovedBeyondTapThreshold = true
                 cancelLongPress()
                 HapticManager.shared.playSpecialKey()
-                let simulatedKey = KeyboardKey.char(sec)
-                delegate?.keyViewDidTap(KeyView(key: simulatedKey))
+                // ⤓ = lệnh đóng bàn phím (dismissKeyboard), KHÔNG phải ký tự để gõ
+                if sec == "⤓" || sec == "dismiss" {
+                    delegate?.keyViewDidTap(KeyView(key: KeyboardKey.dismiss()))
+                } else {
+                    let simulatedKey = KeyboardKey.char(sec)
+                    delegate?.keyViewDidTap(KeyView(key: simulatedKey))
+                }
                 return
             }
 

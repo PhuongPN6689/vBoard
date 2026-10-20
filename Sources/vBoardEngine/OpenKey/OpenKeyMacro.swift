@@ -4,6 +4,9 @@
 //
 //  Chuyển đổi 1-1 từ Macro.h và Macro.cpp của OpenKey (tác giả Mai Vũ Tuyên).
 //
+//  OpenKey gốc: https://github.com/tuyenvm/OpenKey — © Mai Vũ Tuyên, GPL-3.0.
+//  File này là sản phẩm phái sinh, được cấp phép theo GNU GPL-3.0 (xem LICENSE ở gốc repo).
+//
 
 import Foundation
 
